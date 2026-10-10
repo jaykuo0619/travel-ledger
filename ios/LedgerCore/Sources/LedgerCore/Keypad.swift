@@ -191,3 +191,39 @@ public extension Q {
         }
     }
 }
+
+/// Why a quick expense (Siri / Shortcuts) could not be recorded.
+public enum QuickExpenseError: Error, Equatable {
+    case noTrip
+    case badAmount
+    /// No rate is known for this currency yet.
+    case noRate(String)
+}
+
+public extension Q {
+    /// Records an expense without the editor (Siri, Shortcuts): into the trip that is on or about to start, with
+    /// the same defaults 記一筆 would start from. [currency] nil = the default one; [reference] fills in a rate
+    /// the trip doesn't have yet. Returns the saved expense and its trip.
+    static func quickExpense(
+        _ db: Database, amount: Double, title: String?, currency: String?, reference: ReferenceRates?, today: Int64 = todayEpochDay(),
+        minuteOfDay: Int? = nil
+    ) throws -> (expense: Expense, trip: Trip) {
+        guard amount.isFinite, amount > 0 else { throw QuickExpenseError.badAmount }
+        guard let tripId = tripToOpenAtLaunch(try trips(db), today: today), let trip = try Q.trip(db, tripId) else { throw QuickExpenseError.noTrip }
+        let d = try expenseDefaults(db, tripId: tripId, planId: nil)
+        var code = d.currency
+        var text = d.rate
+        if let c = currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), c.count == 3, c != code {
+            code = c
+            let rates = Dictionary(try Q.rates(db, tripId).map { ($0.currency, $0.rate) }, uniquingKeysWith: { a, _ in a })
+            text = Q.rateText(c, tripRates: rates, last: try latestExpense(db, tripId))
+        }
+        if text.isEmpty { text = reference?.suggestion(code) ?? "" }
+        guard let rate = Double(text), rate > 0 else { throw QuickExpenseError.noRate(code) }
+        let e = Expense(tripId: tripId, date: today, amount: amount, currency: code, rate: rate, homeAmount: toHomeAmount(amount, rate),
+                        categoryId: d.categoryId, paymentMethodId: d.paymentId,
+                        title: (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines), minuteOfDay: minuteOfDay)
+        let id = try saveExpense(db, e, photos: []).id
+        return (try Q.expense(db, id) ?? e, trip)
+    }
+}

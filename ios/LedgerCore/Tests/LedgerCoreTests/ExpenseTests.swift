@@ -101,4 +101,29 @@ final class ExpenseTests: XCTestCase {
         XCTAssertTrue(r.isStale(now: 1000 + 90_000_000))
         XCTAssertNil(ReferenceRates.parse(Data(#"{"result":"error"}"#.utf8)))
     }
+
+    func testQuickExpense() throws {
+        let phone = try Phone()
+        XCTAssertThrowsError(try phone.db.write { try Q.quickExpense($0, amount: 10, title: nil, currency: nil, reference: nil, today: 20750) }) {
+            XCTAssertEqual(QuickExpenseError.noTrip, $0 as? QuickExpenseError)
+        }
+        let tripId = try phone.db.write { db in
+            try Q.createTrip(db, Trip(name: "首爾", startDate: 20748, endDate: 20753), members: [],
+                             rates: [TripCurrencyRate(tripId: 0, currency: "KRW", rate: 0.024)])
+        }
+        let r = try phone.db.write { try Q.quickExpense($0, amount: 3000, title: " 晚餐 ", currency: nil, reference: nil, today: 20750, minuteOfDay: 1140) }
+        XCTAssertEqual("首爾", r.trip.name)
+        XCTAssertEqual("KRW", r.expense.currency)
+        XCTAssertEqual(72, r.expense.homeAmount)
+        XCTAssertEqual("晚餐", r.expense.title)
+        XCTAssertEqual(1, try phone.expenses(tripId).count)
+        // A currency the trip has no rate for: the reference rate, or an error when there is none.
+        XCTAssertThrowsError(try phone.db.write { try Q.quickExpense($0, amount: 5, title: nil, currency: "usd", reference: nil, today: 20750) }) {
+            XCTAssertEqual(QuickExpenseError.noRate("USD"), $0 as? QuickExpenseError)
+        }
+        let ref = ReferenceRates(perHome: ["USD": 0.0311], fetchedAt: 0)
+        let usd = try phone.db.write { try Q.quickExpense($0, amount: 5, title: nil, currency: "usd", reference: ref, today: 20750) }
+        XCTAssertEqual(32.15, usd.expense.rate)
+        XCTAssertThrowsError(try phone.db.write { try Q.quickExpense($0, amount: 0, title: nil, currency: nil, reference: nil, today: 20750) })
+    }
 }

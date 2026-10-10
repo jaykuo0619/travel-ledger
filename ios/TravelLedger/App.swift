@@ -4,7 +4,7 @@ import UIKit
 
 @main
 struct TravelLedgerApp: App {
-    @State private var model = AppModel.live()
+    @State private var model = AppModel.shared
 
     var body: some Scene {
         WindowGroup {

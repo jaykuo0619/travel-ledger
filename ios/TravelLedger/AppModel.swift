@@ -52,7 +52,10 @@ final class AppModel {
         self.settings = settings
     }
 
-    static func live() -> AppModel {
+    /// The one model of the running app (the screens, and Siri / Shortcuts actions, all use it).
+    static let shared = live()
+
+    private static func live() -> AppModel {
         let files = FileStore.appDefault()
         let base = files.root.deletingLastPathComponent()
         do {
