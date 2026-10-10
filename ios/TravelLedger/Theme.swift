@@ -56,12 +56,38 @@ enum Radius {
     static let extraLarge: CGFloat = 28
 }
 
-extension Font {
-    /// Small caption above fields and sections (CaptionStyle).
-    static let caption13 = Font.system(size: 13, weight: .medium)
+/// The app's own text size setting (設定 → 字體大小): 1, 1.12 or 1.25.
+private struct TextScaleKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 1
+}
+
+extension EnvironmentValues {
+    var textScale: CGFloat {
+        get { self[TextScaleKey.self] }
+        set { self[TextScaleKey.self] = newValue }
+    }
+}
+
+/// Text at [size] points, multiplied by the system text size and then by the app's setting
+/// (Android: sp × system font scale × FontSize.scale).
+private struct AppFont: ViewModifier {
+    @Environment(\.textScale) private var scale
+    @Environment(\.dynamicTypeSize) private var typeSize
+    let size: CGFloat
+    let weight: Font.Weight
+
+    func body(content: Content) -> some View {
+        let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(typeSize))
+        content.font(.system(size: UIFontMetrics.default.scaledValue(for: size, compatibleWith: traits) * scale, weight: weight))
+    }
 }
 
 extension View {
+    /// The font for text: follows the system text size and the app's 字體大小 setting. Icons keep `.font(.system(size:))`.
+    func appFont(size: CGFloat, weight: Font.Weight = .regular) -> some View {
+        modifier(AppFont(size: size, weight: weight))
+    }
+
     /// Numbers line up in lists (Android's "tnum").
     func tnum() -> some View { monospacedDigit() }
 

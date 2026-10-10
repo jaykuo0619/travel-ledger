@@ -50,9 +50,9 @@ struct HomeView: View {
             // Name + version on one line, the author's signature underneath so it never gets cut off.
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
-                    Text("卡溜趴").font(.system(size: 21, weight: .bold)).lineLimit(1)
+                    Text("卡溜趴").appFont(size: 21, weight: .bold).lineLimit(1)
                     if !model.appVersion.isEmpty {
-                        Text("v\(model.appVersion)").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.textMuted).lineLimit(1)
+                        Text("v\(model.appVersion)").appFont(size: 13, weight: .medium).foregroundStyle(Palette.textMuted).lineLimit(1)
                     }
                 }
                 AuthorSignature(size: 15)
@@ -94,7 +94,7 @@ private struct FilterTabs: View {
                 let on = f == selected
                 Button { onSelect(f) } label: {
                     Text("\(f.rawValue) \(counts[f] ?? 0)")
-                        .font(.system(size: 15, weight: .semibold))
+                        .appFont(size: 15, weight: .semibold)
                         .lineLimit(1).minimumScaleFactor(0.9)
                         .foregroundStyle(on ? Palette.primary : Palette.onSurfaceVariant)
                         .frame(maxWidth: .infinity)
@@ -136,8 +136,8 @@ private struct FeaturedTripCard: View {
                     CoverBadge(text: tripStatus(start: t.startDate, end: t.endDate, today: today)).padding(12)
                 }
             VStack(alignment: .leading, spacing: 5) {
-                Text(t.name).font(.system(size: 21, weight: .bold)).lineLimit(1)
-                Text(fmtRange(t.startDate, t.endDate)).font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                Text(t.name).appFont(size: 21, weight: .bold).lineLimit(1)
+                Text(fmtRange(t.startDate, t.endDate)).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                 TripMeta(trip: t)
                 Spacer().frame(height: 4)
                 let budget = t.budget.flatMap { $0 > 0 ? $0 : nil }
@@ -165,16 +165,16 @@ private struct FeaturedTripCard: View {
 
     private var spent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("已花費").font(.caption13).foregroundStyle(Palette.onSurfaceVariant)
-            Text(fmtMoney(trip.totalHome)).font(.system(size: 21, weight: .bold)).tnum().lineLimit(1).fixedSize()
+            Text("已花費").appFont(size: 13, weight: .medium).foregroundStyle(Palette.onSurfaceVariant)
+            Text(fmtMoney(trip.totalHome)).appFont(size: 21, weight: .bold).tnum().lineLimit(1).fixedSize()
         }
     }
 
     private func budgetText(_ budget: Double, alignment: HorizontalAlignment) -> some View {
         let f = trip.totalHome / budget
         return VStack(alignment: alignment, spacing: 0) {
-            Text("\(javaRound(f * 100))%").font(.system(size: 16, weight: .semibold)).foregroundStyle(budgetColor(f))
-            Text("預算 \(fmtMoney(budget))").font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1).fixedSize()
+            Text("\(javaRound(f * 100))%").appFont(size: 16, weight: .semibold).foregroundStyle(budgetColor(f))
+            Text("預算 \(fmtMoney(budget))").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1).fixedSize()
         }
     }
 }
@@ -191,12 +191,12 @@ private struct CompactTripCard: View {
                 .frame(width: 72, height: 72)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
-                Text(t.name).font(.system(size: 17, weight: .semibold)).lineLimit(2).multilineTextAlignment(.leading)
-                Text(fmtRange(t.startDate, t.endDate)).font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
-                Text(tripStatus(start: t.startDate, end: t.endDate, today: today)).font(.system(size: 13)).foregroundStyle(Palette.primary)
+                Text(t.name).appFont(size: 17, weight: .semibold).lineLimit(2).multilineTextAlignment(.leading)
+                Text(fmtRange(t.startDate, t.endDate)).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                Text(tripStatus(start: t.startDate, end: t.endDate, today: today)).appFont(size: 13).foregroundStyle(Palette.primary)
                 HStack(alignment: .center) {
                     TripMeta(trip: t).frame(maxWidth: .infinity, alignment: .leading)
-                    Text(fmtMoney(t.totalHome)).font(.system(size: 16, weight: .semibold)).tnum().lineLimit(1).fixedSize()
+                    Text(fmtMoney(t.totalHome)).appFont(size: 16, weight: .semibold).tnum().lineLimit(1).fixedSize()
                         .padding(.leading, 8)
                 }
             }

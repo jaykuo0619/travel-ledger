@@ -45,7 +45,7 @@ struct TripEditView: View {
                         CoverThemePicker(name: name, start: start, selected: theme) { theme = $0 }
                     } else {
                         Button { removeCover() } label: {
-                            Label("不用照片,改用插畫", systemImage: "paintbrush.pointed").font(.system(size: 15, weight: .semibold))
+                            Label("不用照片,改用插畫", systemImage: "paintbrush.pointed").appFont(size: 15, weight: .semibold)
                         }
                         .padding(.vertical, 4)
                     }
@@ -53,7 +53,7 @@ struct TripEditView: View {
                     FieldBox("旅程名稱") {
                         TextField("", text: $name, prompt: Text("例如:東京美食之旅").foregroundStyle(Palette.textMuted), axis: .vertical)
                             .lineLimit(1 ... 2)
-                            .font(.system(size: 16))
+                            .appFont(size: 16)
                     }
 
                     HStack(spacing: 10) {
@@ -62,7 +62,7 @@ struct TripEditView: View {
                     }
                     .fixedSize(horizontal: false, vertical: true)
                     Text(verbatim: "\(start.civil.year) 年 · 共 \(end - start + 1) 天")
-                        .font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant).padding(.leading, 4)
+                        .appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant).padding(.leading, 4)
 
                     SectionHeader("旅行成員 · \(members.count) 人")
                     membersGrid
@@ -75,33 +75,33 @@ struct TripEditView: View {
                         }
                     }
                     Text("行程的「導航」會用這個 App。韓國建議 Naver Map 或 KakaoMap,大眾運輸和步行路線比較準。")
-                        .font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                        .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
 
                     SectionHeader("預設匯率") {
-                        Text("1 外幣 = ? 新台幣").font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                        Text("1 外幣 = ? 新台幣").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                     }
                     if !rates.isEmpty { ratesCard }
                     AddChip("新增幣別") { addingCurrency = true }
                     Text("所有總計以新台幣計算;記帳時每筆的匯率仍可個別修改。")
-                        .font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                        .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
 
                     FieldBox("預算(選填)") {
                         TextField("", text: $budget, prompt: Text("不設定").foregroundStyle(Palette.textMuted))
                             .keyboardType(.decimalPad)
-                            .font(.system(size: 16))
+                            .appFont(size: 16)
                             .onChange(of: budget) { _, v in
                                 let f = v.filter { $0.isNumber || $0 == "." }
                                 if f != v { budget = f }
                             }
                     } trailing: {
-                        Text("NT$").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.onSurfaceVariant)
+                        Text("NT$").appFont(size: 15, weight: .semibold).foregroundStyle(Palette.onSurfaceVariant)
                     }
 
                     HStack(spacing: 12) {
                         IconTile(symbol: "person.2.fill", color: Palette.category(4))
                         VStack(alignment: .leading, spacing: 0) {
-                            Text("分帳功能").font(.system(size: 16, weight: .semibold))
-                            Text("與朋友旅遊時開啟").font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                            Text("分帳功能").appFont(size: 16, weight: .semibold)
+                            Text("與朋友旅遊時開啟").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                         }
                         Spacer(minLength: 8)
                         Toggle("分帳功能", isOn: $split).labelsHidden()
@@ -176,7 +176,7 @@ struct TripEditView: View {
                 PhotosPicker(selection: $photoItem, matching: .images) {
                     HStack(spacing: 6) {
                         Image(systemName: "photo.on.rectangle").font(.system(size: 14))
-                        Text(cover == nil ? "從相簿選封面" : "更換封面").font(.system(size: 15, weight: .semibold))
+                        Text(cover == nil ? "從相簿選封面" : "更換封面").appFont(size: 15, weight: .semibold)
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
@@ -190,7 +190,7 @@ struct TripEditView: View {
     private func dateBox(_ label: String, _ day: Int64, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             FieldBox(label) {
-                Text(fmtShortDate(day)).font(.system(size: 17, weight: .semibold)).tnum().lineLimit(1).minimumScaleFactor(0.8)
+                Text(fmtShortDate(day)).appFont(size: 17, weight: .semibold).tnum().lineLimit(1).minimumScaleFactor(0.8)
                     .foregroundStyle(Palette.onBackground)
             } trailing: {
                 Image(systemName: "calendar").foregroundStyle(Palette.onSurfaceVariant)
@@ -210,7 +210,7 @@ struct TripEditView: View {
                             Button { addingMember = true } label: {
                                 HStack(spacing: 6) {
                                     Image(systemName: "person.badge.plus")
-                                    Text("新增成員").font(.system(size: 15, weight: .semibold)).lineLimit(1).fixedSize()
+                                    Text("新增成員").appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
                                 }
                                 .foregroundStyle(Palette.primary)
                                 .frame(maxWidth: .infinity, minHeight: 52)
@@ -220,7 +220,7 @@ struct TripEditView: View {
                         } else {
                             HStack(spacing: 10) {
                                 Avatar(name: m, size: 32)
-                                Text(m).font(.system(size: 16)).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                                Text(m).appFont(size: 16).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                                 Button { members.removeAll { $0 == m } } label: {
                                     Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.textMuted)
                                         .frame(width: 36, height: 40)
@@ -245,12 +245,12 @@ struct TripEditView: View {
                 if r.currency != rates.first?.currency { Divider().overlay(Palette.hairline).padding(.leading, 64) }
                 HStack(spacing: 12) {
                     CurrencyBadge(code: r.currency, size: 40)
-                    Text(currencyNames[r.currency] ?? r.currency).font(.system(size: 16)).lineLimit(1)
+                    Text(currencyNames[r.currency] ?? r.currency).appFont(size: 16).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     TextField("", text: $r.value, prompt: Text("匯率").foregroundStyle(Palette.textMuted))
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
-                        .font(.system(size: 16)).tnum()
+                        .appFont(size: 16).tnum()
                         .padding(.horizontal, 10).padding(.vertical, 8)
                         .frame(width: 110)
                         .background(Palette.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -361,7 +361,7 @@ private struct CoverThemePicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("封面插畫").font(.system(size: 16, weight: .semibold))
+            Text("封面插畫").appFont(size: 16, weight: .semibold)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach([CoverTheme?.none] + CoverTheme.allCases.map(Optional.some), id: \.self) { t in
@@ -381,7 +381,7 @@ private struct CoverThemePicker: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
                                         .strokeBorder(on ? Palette.primary : Palette.hairline, lineWidth: on ? 2.5 : 1))
-                                Text(t?.label ?? "自動").font(.system(size: 13, weight: .medium))
+                                Text(t?.label ?? "自動").appFont(size: 13, weight: .medium)
                                     .foregroundStyle(on ? Palette.primary : Palette.onSurfaceVariant)
                             }
                         }
@@ -424,7 +424,7 @@ struct AddChip: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: "plus").font(.system(size: 15, weight: .semibold))
-                Text(text).font(.system(size: 15, weight: .semibold))
+                Text(text).appFont(size: 15, weight: .semibold)
             }
             .foregroundStyle(Palette.primary)
             .padding(.horizontal, 14)
@@ -452,7 +452,7 @@ struct DayPickerSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 8) {
-                Text(fmtShortDate(CivilDate.today(date).epochDay)).font(.system(size: 28, weight: .bold)).tnum()
+                Text(fmtShortDate(CivilDate.today(date).epochDay)).appFont(size: 28, weight: .bold).tnum()
                     .padding(.horizontal, 20)
                 Group {
                     if let minDay {
@@ -499,7 +499,7 @@ struct CurrencyPickerSheet: View {
                         TextField("", text: $custom)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
-                            .font(.system(size: 16))
+                            .appFont(size: 16)
                             .onChange(of: custom) { _, v in
                                 let f = String(v.uppercased().filter { $0.isLetter }.prefix(3))
                                 if f != v { custom = f }

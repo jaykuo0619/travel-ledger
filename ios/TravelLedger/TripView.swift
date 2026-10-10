@@ -67,9 +67,9 @@ struct TripView: View {
                         .frame(width: 40, height: 40)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(trip.name).font(.system(size: 21, weight: .bold)).lineLimit(1)
+                        Text(trip.name).appFont(size: 21, weight: .bold).lineLimit(1)
                         Text("\(tripStatus(start: trip.startDate, end: trip.endDate, today: today)) · \(fmtShortDate(trip.startDate)) – \(fmtShortDate(trip.endDate))")
-                            .font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1).minimumScaleFactor(0.85)
+                            .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1).minimumScaleFactor(0.85)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,7 +101,7 @@ struct ReadOnlyBanner: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "eye").font(.system(size: 15))
-            Text(text).font(.system(size: 15))
+            Text(text).appFont(size: 15)
             Spacer(minLength: 0)
         }
         .foregroundStyle(Palette.onSecondaryContainer)
@@ -135,7 +135,7 @@ private struct TabBar: View {
                             Image(systemName: t.symbol).font(.system(size: 18))
                                 .padding(.horizontal, 16).padding(.vertical, 3)
                                 .background(on ? Palette.primaryContainer : .clear, in: Capsule())
-                            Text(t.rawValue).font(.system(size: 15, weight: .semibold))
+                            Text(t.rawValue).appFont(size: 15, weight: .semibold)
                         }
                         .foregroundStyle(on ? Palette.primary : Palette.onSurfaceVariant)
                         .frame(maxWidth: .infinity, minHeight: 60)
@@ -163,7 +163,7 @@ struct Segmented: View {
             ForEach(options.indices, id: \.self) { i in
                 let on = i == selected
                 Button { onSelect(i) } label: {
-                    Text(options[i]).font(.system(size: 15, weight: .semibold)).lineLimit(1).fixedSize()
+                    Text(options[i]).appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
                         .foregroundStyle(on ? Palette.primary : Palette.onSurfaceVariant)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
@@ -199,7 +199,7 @@ private struct PlanTab: View {
                         HStack(spacing: 10) {
                             Image(systemName: "bell.badge").foregroundStyle(Palette.danger)
                             Text("\(needBooking.count) 項需要訂位:" + needBooking.map(\.title).joined(separator: "、"))
-                                .font(.system(size: 15)).lineLimit(2)
+                                .appFont(size: 15).lineLimit(2)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -227,14 +227,14 @@ private struct PlanTab: View {
         ForEach(Array(trip.startDate ... max(trip.startDate, trip.endDate)), id: \.self) { day in
             let rows = plans.filter { $0.date == day }
             HStack(spacing: 0) {
-                Text("Day \(day - trip.startDate + 1)").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.primary).fixedSize()
-                Text("  \(fmtShortDate(day))").font(.system(size: 16, weight: .semibold)).lineLimit(1)
+                Text("Day \(day - trip.startDate + 1)").appFont(size: 16, weight: .semibold).foregroundStyle(Palette.primary).fixedSize()
+                Text("  \(fmtShortDate(day))").appFont(size: 16, weight: .semibold).lineLimit(1)
                 Spacer(minLength: 0)
             }
             .padding(.leading, 4).padding(.top, 6)
             if let n = notes[day] { DayNoteCard(text: n) }
             if rows.isEmpty {
-                Text("還沒有安排").font(.system(size: 15)).foregroundStyle(Palette.textMuted).padding(.leading, 4)
+                Text("還沒有安排").appFont(size: 15).foregroundStyle(Palette.textMuted).padding(.leading, 4)
             } else {
                 PlanCard(rows: rows, trip: trip, showDate: false)
             }
@@ -259,9 +259,9 @@ private struct PlanTab: View {
             let pending = rows.filter { $0.reservation == Reservation.needed && $0.status == PlanStatus.todo }.count
             HStack(spacing: 6) {
                 Image(systemName: style.symbol).font(.system(size: 15)).foregroundStyle(style.color)
-                Text("\(name) · \(rows.count)").font(.system(size: 16, weight: .semibold))
+                Text("\(name) · \(rows.count)").appFont(size: 16, weight: .semibold)
                 Spacer(minLength: 8)
-                if pending > 0 { Text("\(pending) 項待訂位").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.danger) }
+                if pending > 0 { Text("\(pending) 項待訂位").appFont(size: 13, weight: .medium).foregroundStyle(Palette.danger) }
             }
             .padding(.leading, 4).padding(.top, 6)
             PlanCard(rows: rows, trip: trip, showDate: true)
@@ -332,11 +332,11 @@ private struct PlanRowItem: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         if let m = p.minuteOfDay {
-                            Text(fmtTime(m)).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.primary).tnum().fixedSize()
+                            Text(fmtTime(m)).appFont(size: 16, weight: .semibold).foregroundStyle(Palette.primary).tnum().fixedSize()
                                 .padding(.trailing, 2)
                         }
                         Image(systemName: style.symbol).font(.system(size: 14)).foregroundStyle(style.color)
-                        Text(p.title).font(.system(size: 16, weight: .medium)).strikethrough(skipped).lineLimit(1)
+                        Text(p.title).appFont(size: 16, weight: .medium).strikethrough(skipped).lineLimit(1)
                             .foregroundStyle(done || skipped ? Palette.onSurfaceVariant : Palette.onBackground)
                     }
                     let tags = tags(p)
@@ -377,7 +377,7 @@ struct Tag: View {
     let color: Color
 
     var body: some View {
-        Text(text).font(.system(size: 13, weight: .medium)).foregroundStyle(color).lineLimit(1)
+        Text(text).appFont(size: 13, weight: .medium).foregroundStyle(color).lineLimit(1)
             .padding(.horizontal, 6).padding(.vertical, 1)
             .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
@@ -397,13 +397,13 @@ struct DayNoteCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Image(systemName: "note.text").font(.system(size: 16)).foregroundStyle(Palette.warning)
-                Text(open ? "當日筆記" : "當日筆記 · " + firstLine).font(.system(size: 16, weight: .semibold)).lineLimit(1)
+                Text(open ? "當日筆記" : "當日筆記 · " + firstLine).appFont(size: 16, weight: .semibold).lineLimit(1)
                 Spacer(minLength: 0)
                 Image(systemName: open ? "chevron.up" : "chevron.down").font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Palette.onSurfaceVariant)
                     .accessibilityLabel(open ? "收起" : "展開")
             }
-            if open { LinkText(text: text).font(.system(size: 15)) }
+            if open { LinkText(text: text).appFont(size: 15) }
         }
         .padding(.leading, 14).padding(.trailing, 12).padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -469,12 +469,12 @@ struct DayHeader: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Text(fmtDayHeader(date)).font(.system(size: 16, weight: .semibold)).lineLimit(1).fixedSize()
+            Text(fmtDayHeader(date)).appFont(size: 16, weight: .semibold).lineLimit(1).fixedSize()
             Text(date < trip.startDate ? "  出發前" : date > trip.endDate ? "  旅程後" : "  第 \(date - trip.startDate + 1) 天")
-                .font(.system(size: 13)).foregroundStyle(Palette.textMuted).lineLimit(1)
+                .appFont(size: 13).foregroundStyle(Palette.textMuted).lineLimit(1)
             Spacer(minLength: 8)
             if let trailing {
-                Text(trailing).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.onSurfaceVariant).tnum().lineLimit(1).fixedSize()
+                Text(trailing).appFont(size: 16, weight: .semibold).foregroundStyle(Palette.onSurfaceVariant).tnum().lineLimit(1).fixedSize()
             }
         }
         .padding(.horizontal, 4)
@@ -497,16 +497,16 @@ private struct SummaryCard: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("總花費(新台幣)").font(.caption13).foregroundStyle(Palette.onSurfaceVariant)
-                    Text(fmtMoney(total)).font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.primary).tnum()
+                    Text("總花費(新台幣)").appFont(size: 13, weight: .medium).foregroundStyle(Palette.onSurfaceVariant)
+                    Text(fmtMoney(total)).appFont(size: 28, weight: .bold).foregroundStyle(Palette.primary).tnum()
                         .lineLimit(1).minimumScaleFactor(0.7)
                 }
                 Spacer(minLength: 8)
                 if let budget {
                     let f = total / budget
                     VStack(alignment: .trailing, spacing: 0) {
-                        Text("\(javaRound(f * 100))%").font(.system(size: 17, weight: .semibold)).foregroundStyle(budgetColor(f))
-                        Text("預算 \(fmtMoney(budget))").font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1).fixedSize()
+                        Text("\(javaRound(f * 100))%").appFont(size: 17, weight: .semibold).foregroundStyle(budgetColor(f))
+                        Text("預算 \(fmtMoney(budget))").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1).fixedSize()
                     }
                 }
             }
@@ -527,8 +527,8 @@ private struct SummaryCard: View {
 
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(label).font(.caption13).foregroundStyle(Palette.onSurfaceVariant)
-            Text(value).font(.system(size: 17, weight: .semibold)).tnum().lineLimit(1).minimumScaleFactor(0.8)
+            Text(label).appFont(size: 13, weight: .medium).foregroundStyle(Palette.onSurfaceVariant)
+            Text(value).appFont(size: 17, weight: .semibold).tnum().lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -593,11 +593,11 @@ private struct CategoryCard: View {
                 IconTile(symbol: c.style.symbol, color: c.style.color, size: 30, corner: 9)
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 4) {
-                        Text(c.name).font(.system(size: 15)).lineLimit(1)
+                        Text(c.name).appFont(size: 15).lineLimit(1)
                         Spacer(minLength: 0)
-                        Text("\(javaRound(c.amount / total * 100))%").font(.system(size: 13, weight: .medium)).foregroundStyle(c.style.color).fixedSize()
+                        Text("\(javaRound(c.amount / total * 100))%").appFont(size: 13, weight: .medium).foregroundStyle(c.style.color).fixedSize()
                     }
-                    Text(fmtMoney(c.amount)).font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant).tnum().lineLimit(1)
+                    Text(fmtMoney(c.amount)).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).tnum().lineLimit(1)
                 }
             }
             .foregroundStyle(Palette.onBackground)
@@ -621,19 +621,19 @@ struct ExpenseRowItem: View {
             HStack(spacing: 12) {
                 IconTile(symbol: style.symbol, color: style.color, size: 42)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(e.title.isBlank ? (e.categoryName ?? "未分類") : e.title).font(.system(size: 16, weight: .medium)).lineLimit(1)
+                    Text(e.title.isBlank ? (e.categoryName ?? "未分類") : e.title).appFont(size: 16, weight: .medium).lineLimit(1)
                     Text([e.categoryName ?? "未分類", e.paymentMethodName, e.minuteOfDay.map(fmtTime)].compactMap { $0 }.joined(separator: " · "))
-                        .font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1)
+                        .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1)
                     if let who = e.pending ? "我的補充 · 還沒傳給記帳人" : e.addedBy.map({ "\($0) 補充" }) {
-                        Text(who).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.warning).lineLimit(1)
+                        Text(who).appFont(size: 13, weight: .medium).foregroundStyle(Palette.warning).lineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .trailing, spacing: 1) {
                     if e.currency != homeCurrency {
-                        Text(fmtAmount(e.amount, e.currency)).font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant).tnum().lineLimit(1).fixedSize()
+                        Text(fmtAmount(e.amount, e.currency)).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).tnum().lineLimit(1).fixedSize()
                     }
-                    Text(fmtMoney(e.homeAmount)).font(.system(size: 16, weight: .semibold)).tnum().lineLimit(1).fixedSize()
+                    Text(fmtMoney(e.homeAmount)).appFont(size: 16, weight: .semibold).tnum().lineLimit(1).fixedSize()
                 }
                 if let thumb = e.thumbPath {
                     LocalImage(path: thumb, maxPixel: 160) { Palette.surfaceVariant }

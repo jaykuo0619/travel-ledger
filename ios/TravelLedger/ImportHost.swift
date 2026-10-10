@@ -111,7 +111,7 @@ private struct DialogSheet<Body: View>: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 10) {
                         Image(systemName: symbol).font(.system(size: 22)).foregroundStyle(Palette.primary)
-                        Text(title).font(.system(size: 21, weight: .bold))
+                        Text(title).appFont(size: 21, weight: .bold)
                     }
                     content
                     if busy { ProgressView().frame(maxWidth: .infinity) }
@@ -132,7 +132,7 @@ private struct DialogSheet<Body: View>: View {
 
     @ViewBuilder private var buttons: some View {
         Button(action: onCancel) {
-            Text(cancelText).font(.system(size: 16, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 48)
+            Text(cancelText).appFont(size: 16, weight: .semibold).frame(maxWidth: .infinity, minHeight: 48)
                 .background(Palette.secondaryContainer, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -159,23 +159,23 @@ private struct ImportConfirmSheet: View {
                     busy: busy, cancelText: "取消", confirmText: confirm, onCancel: onCancel, onConfirm: onConfirm) {
             ForEach(summary.trips.prefix(6), id: \.uuid) { t in
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(t.name).font(.system(size: 17, weight: .semibold))
+                    Text(t.name).appFont(size: 17, weight: .semibold)
                     Text("\(fmtShortDate(t.startDate)) – \(fmtShortDate(t.endDate)) · \(t.expenseCount) 筆 · \(fmtMoney(t.totalHome))")
-                        .font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                        .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                     if existing.contains(t.uuid) {
-                        Text("手機上已有這趟旅程,會更新成這份").font(.system(size: 13)).foregroundStyle(Palette.primary)
+                        Text("手機上已有這趟旅程,會更新成這份").appFont(size: 13).foregroundStyle(Palette.primary)
                     }
                 }
             }
-            if summary.trips.count > 6 { Text("…共 \(summary.trips.count) 個旅程").font(.system(size: 13)) }
+            if summary.trips.count > 6 { Text("…共 \(summary.trips.count) 個旅程").appFont(size: 13) }
             Text("\(stamp(summary.exportedAt)) 製作" + (summary.photoCount > 0 ? " · 含 \(summary.photoCount) 張照片" : " · 不含照片") + "\n" +
                 (shared ? "匯入後只能看、不能改。對方再分享一次,打開新檔案就會更新。" : "手機上已有的同一趟旅程會被備份內容取代,其他旅程保留不動。"))
-                .font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
+                .appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
             if !newerHere.isEmpty {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Palette.error)
                     Text("手機上的「\(newerHere.joined(separator: "」「"))」比這份備份新,還原會蓋掉備份之後記的內容。")
-                        .font(.system(size: 15)).foregroundStyle(Palette.onErrorContainer)
+                        .appFont(size: 15).foregroundStyle(Palette.onErrorContainer)
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -202,7 +202,7 @@ private struct ReviewAdditionsSheet: View {
         DialogSheet(symbol: "text.badge.plus", title: "\(additions.from) 的補充", busy: busy, cancelText: "略過全部",
                     confirmText: "加入 \(chosen.count) 項", confirmEnabled: !chosen.isEmpty, onCancel: onCancel, onConfirm: { onAccept(chosen) }) {
             Text("要加入「\(additions.tripName)」的項目打勾。加入後記得再分享一次給大家。")
-                .font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
+                .appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
             ForEach(additions.items) { item in
                 let on = chosen.contains(item.uuid)
                 Button {
@@ -212,8 +212,8 @@ private struct ReviewAdditionsSheet: View {
                         Image(systemName: on ? "checkmark.square.fill" : "square").font(.system(size: 22))
                             .foregroundStyle(on ? Palette.primary : Palette.onSurfaceVariant)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(item.title).font(.system(size: 16))
-                            Text(item.detail).font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                            Text(item.title).appFont(size: 16)
+                            Text(item.detail).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                         }
                         Spacer(minLength: 0)
                     }
@@ -236,8 +236,8 @@ private struct PlansPreviewSheet: View {
         let refused = preview.refused != nil
         DialogSheet(symbol: "desktopcomputer", title: refused ? "無法併入" : "電腦排的行程", busy: busy,
                     cancelText: refused ? "知道了" : "取消", confirmText: refused ? nil : "併入", onCancel: onCancel, onConfirm: onConfirm) {
-            Text(preview.tripName).font(.system(size: 17, weight: .semibold))
-            Text(preview.refused ?? message).font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
+            Text(preview.tripName).appFont(size: 17, weight: .semibold)
+            Text(preview.refused ?? message).appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
         }
     }
 

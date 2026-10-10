@@ -114,7 +114,7 @@ struct FieldBox<Content: View, Trailing: View>: View {
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(label).font(.caption13).foregroundStyle(Palette.onSurfaceVariant)
+                Text(label).appFont(size: 13, weight: .medium).foregroundStyle(Palette.onSurfaceVariant)
                 content
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -138,7 +138,7 @@ struct SectionHeader<Trailing: View>: View {
 
     var body: some View {
         HStack {
-            Text(text).font(.system(size: 16, weight: .semibold))
+            Text(text).appFont(size: 16, weight: .semibold)
             Spacer(minLength: 8)
             trailing
         }
@@ -163,7 +163,7 @@ struct PillButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if let symbol { Image(systemName: symbol).font(.system(size: 17, weight: .semibold)) }
-                Text(text).font(.system(size: 16, weight: .semibold))
+                Text(text).appFont(size: 16, weight: .semibold)
             }
             .frame(maxWidth: .infinity, minHeight: height)
             .foregroundStyle(enabled ? Palette.onPrimary : Palette.onSurfaceVariant)
@@ -299,7 +299,7 @@ struct CoverBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 13, weight: .medium))
+            .appFont(size: 13, weight: .medium)
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
@@ -315,7 +315,7 @@ struct MetaItem: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: symbol).font(.system(size: 12))
-            Text(text).font(.system(size: 13)).lineLimit(1).fixedSize()
+            Text(text).appFont(size: 13).lineLimit(1).fixedSize()
         }
         .foregroundStyle(Palette.onSurfaceVariant)
     }
@@ -336,7 +336,7 @@ struct SelectPill<Leading: View>: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 leading
-                Text(text).font(.system(size: 15, weight: .semibold)).lineLimit(1).fixedSize()
+                Text(text).appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
             }
             .foregroundStyle(selected ? Palette.onPrimaryContainer : Palette.onBackground)
             .padding(.horizontal, 12)
@@ -430,8 +430,8 @@ struct EmptyState: View {
     var body: some View {
         VStack(spacing: 0) {
             IconTile(symbol: symbol, color: Palette.primary, size: 72, corner: 24)
-            Text(title).font(.system(size: 17, weight: .semibold)).padding(.top, 16)
-            Text(message).font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
+            Text(title).appFont(size: 17, weight: .semibold).padding(.top, 16)
+            Text(message).appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
                 .multilineTextAlignment(.center).padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

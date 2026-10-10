@@ -11,7 +11,9 @@ struct TravelLedgerApp: App {
                 .environment(model)
                 .tint(Palette.primary)
                 .preferredColorScheme(model.settings.theme.colorScheme)
-                .dynamicTypeSize(model.settings.fontSize.dynamicType)
+                .environment(\.textScale, model.settings.fontSize.factor)
+                // Beyond this the layouts stop fitting; the app's own setting adds up to 25% on top.
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 // A .zip opened with 卡溜趴 from LINE, Files or AirDrop.
                 .onOpenURL { url in model.receive(url) }
                 .modifier(BrandSplashCover())

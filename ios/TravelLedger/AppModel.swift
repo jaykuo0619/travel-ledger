@@ -146,13 +146,8 @@ enum FontScale: String, CaseIterable {
     case standard, large, xlarge
     var label: String { self == .standard ? "標準" : self == .large ? "大" : "特大" }
     var sample: CGFloat { self == .standard ? 16 : self == .large ? 20 : 24 }
-    var dynamicType: ClosedRange<DynamicTypeSize> {
-        switch self {
-        case .standard: return .xSmall ... .accessibility5
-        case .large: return .large ... .accessibility5
-        case .xlarge: return .xLarge ... .accessibility5
-        }
-    }
+    /// Multiplied on top of the system text size (ui/Theme.kt FontSize.scale).
+    var factor: CGFloat { self == .standard ? 1 : self == .large ? 1.12 : 1.25 }
 }
 
 struct AppSettings: Equatable {

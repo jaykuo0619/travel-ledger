@@ -41,8 +41,8 @@ private struct DetailCard: View {
                 if i > 0 { Divider().overlay(Palette.hairline).padding(.leading, 50) }
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Image(systemName: lines[i].symbol).foregroundStyle(Palette.onSurfaceVariant).frame(width: 24)
-                    Text(lines[i].label).font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant).frame(width: 72, alignment: .leading)
-                    LinkText(text: lines[i].value).font(.system(size: 16)).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(lines[i].label).appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant).frame(width: 72, alignment: .leading)
+                    LinkText(text: lines[i].value).appFont(size: 16).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, 14).padding(.vertical, 12)
             }
@@ -90,14 +90,14 @@ struct PlanDetailView: View {
         let meta = [category?.name ?? "未分類", status, p.addedBy.map { "\($0) 補充" }, p.pending ? "我的補充" : nil].compactMap { $0 }
 
         return VStack(alignment: .leading, spacing: 12) {
-            Text(t.name).font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant).padding(.leading, 4)
+            Text(t.name).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).padding(.leading, 4)
             HStack(spacing: 14) {
                 IconTile(symbol: style.symbol, color: style.color, size: 48, corner: 14)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(p.title).font(.system(size: 21, weight: .bold))
+                    Text(p.title).appFont(size: 21, weight: .bold)
                     Text((p.date.map { "Day \($0 - t.startDate + 1) · \(fmtShortDate($0))" } ?? "待排") + (p.minuteOfDay.map { " · \(fmtTime($0))" } ?? ""))
-                        .font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
-                    Text(meta.joined(separator: " · ")).font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                        .appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
+                    Text(meta.joined(separator: " · ")).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                 }
             }
             .ledgerCard()
@@ -106,8 +106,8 @@ struct PlanDetailView: View {
 
             if !p.note.isBlank {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("筆記", systemImage: "text.alignleft").font(.system(size: 16, weight: .semibold))
-                    LinkText(text: p.note).font(.system(size: 16)).textSelection(.enabled)
+                    Label("筆記", systemImage: "text.alignleft").appFont(size: 16, weight: .semibold)
+                    LinkText(text: p.note).appFont(size: 16).textSelection(.enabled)
                 }
                 .ledgerCard(padding: 14)
             }
@@ -180,14 +180,14 @@ struct ExpenseDetailView: View {
                 HStack(spacing: 14) {
                     IconTile(symbol: style.symbol, color: style.color, size: 48, corner: 14)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(s.title.isBlank ? (category?.name ?? "支出") : s.title).font(.system(size: 21, weight: .bold))
-                        Text(fmtShortDateTime(s.date, s.minuteOfDay)).font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
+                        Text(s.title.isBlank ? (category?.name ?? "支出") : s.title).appFont(size: 21, weight: .bold)
+                        Text(fmtShortDateTime(s.date, s.minuteOfDay)).appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
                     }
                 }
-                Text(fmtAmount(s.amount, s.currency)).font(.system(size: 28, weight: .semibold)).tnum().padding(.top, 14)
+                Text(fmtAmount(s.amount, s.currency)).appFont(size: 28, weight: .semibold).tnum().padding(.top, 14)
                     .lineLimit(1).minimumScaleFactor(0.7)
                 if s.currency != homeCurrency {
-                    Text("≈ \(fmtMoney(s.homeAmount)) · 匯率 \(fmtNumber(s.rate))").font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
+                    Text("≈ \(fmtMoney(s.homeAmount)) · 匯率 \(fmtNumber(s.rate))").appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
                 }
             }
             .ledgerCard()
@@ -223,7 +223,7 @@ struct PhotoTypeBadge: View {
         let receipt = type == PhotoType.receipt
         HStack(spacing: 3) {
             Image(systemName: receipt ? "doc.text" : "photo").font(.system(size: 10))
-            Text(receipt ? "收據" : "回憶").font(.system(size: 11, weight: .medium))
+            Text(receipt ? "收據" : "回憶").appFont(size: 11, weight: .medium)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 5).padding(.vertical, 2)
@@ -255,7 +255,7 @@ struct PhotoViewer: View {
                     Image(systemName: "xmark").font(.system(size: 18, weight: .semibold)).frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("關閉")
-                Text("\(page + 1) / \(paths.count)").font(.system(size: 17, weight: .semibold))
+                Text("\(page + 1) / \(paths.count)").appFont(size: 17, weight: .semibold)
                 Spacer()
             }
             .foregroundStyle(.white)

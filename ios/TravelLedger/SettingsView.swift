@@ -51,16 +51,16 @@ struct SettingsView: View {
                     HStack(spacing: 14) {
                         AppIconView(size: 40)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("卡溜趴").font(.system(size: 16))
+                            Text("卡溜趴").appFont(size: 16)
                             Text("版本 \(model.appVersion) · 資料只存在這支手機,記得定期備份")
-                                .font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                                .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                         }
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 14).padding(.vertical, 12)
                     Divider().overlay(Palette.hairline)
                     HStack(alignment: .lastTextBaseline, spacing: 0) {
-                        Text("作者 ").font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
+                        Text("作者 ").appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
                         AuthorSignature(size: 22)
                     }
                     .frame(maxWidth: .infinity)
@@ -105,7 +105,7 @@ private struct OptionCard: View {
                     Text("Aa").font(.system(size: sample, weight: .semibold)).foregroundStyle(selected ? Palette.primary : Palette.onSurfaceVariant)
                         .dynamicTypeSize(.large)
                 }
-                Text(label).font(.system(size: 15, weight: .semibold)).lineLimit(1).fixedSize()
+                Text(label).appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
                     .foregroundStyle(selected ? Palette.onPrimaryContainer : Palette.onBackground)
             }
             .frame(maxWidth: .infinity, minHeight: 80)
@@ -128,8 +128,8 @@ private struct SettingRow: View {
         let row = HStack(spacing: 14) {
             IconTile(symbol: symbol, color: color, size: 40)
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 16))
-                Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
+                Text(title).appFont(size: 16)
+                Text(subtitle).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
             }
             Spacer(minLength: 0)
             if action != nil { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.textMuted) }
