@@ -30,11 +30,9 @@ struct BrandSplash: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { onStart() }
     }
 
-    /// Paper behind the animation (the brand sheet's --paper), so nothing flashes before the page draws.
-    static func paper(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x12 / 255)
-            : Color(red: 0xF5 / 255, green: 0xF5 / 255, blue: 0xF3 / 255)
-    }
+    /// Paper behind the animation (the brand sheet's --paper; also the launch screen colour), so nothing
+    /// flashes before the page draws.
+    static let paper = Color("LaunchPaper")
 
     /// How long the splash stays once the animation has started: its 2.3 s plus a short hold.
     static let duration: Duration = .milliseconds(2800)
@@ -102,7 +100,6 @@ play();
 
 /// Covers the app with the brand animation at launch, then fades away.
 struct BrandSplashCover: ViewModifier {
-    @Environment(\.colorScheme) private var scheme
     @State private var showing = true
     @State private var started = false
 
@@ -110,10 +107,13 @@ struct BrandSplashCover: ViewModifier {
         content.overlay {
             if showing {
                 BrandSplash(onStart: { started = true })
-                    .background(BrandSplash.paper(scheme))
+                    .background(BrandSplash.paper)
                     .ignoresSafeArea()
                     .transition(.opacity)
                     .accessibilityLabel("KUØ WORKS 杰構工作室")
+                    // A tap skips the animation.
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(.easeOut(duration: 0.2)) { showing = false } }
                     .task(id: started) {
                         try? await Task.sleep(for: started ? BrandSplash.duration : BrandSplash.giveUp)
                         guard !Task.isCancelled else { return }
