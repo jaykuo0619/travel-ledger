@@ -262,6 +262,53 @@ private struct TabBar: View {
     }
 }
 
+/// What travels while a plan item is dragged.
+private let planDragPrefix = "kaliupa-plan:"
+
+private struct PlanDrag: ViewModifier {
+    let id: Int64
+    let title: String
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.draggable(planDragPrefix + String(id)) {
+                Text(title).appFont(size: 16, weight: .medium).lineLimit(1)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// A day (or 待排 when [day] is nil) that plan items can be dropped on.
+private struct PlanDropTarget: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let trip: Trip
+    let day: Int64?
+    @State private var targeted = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(6)
+            .background(targeted ? Palette.primaryContainer.opacity(0.6) : .clear, in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
+            .padding(-6)
+            .dropDestination(for: String.self) { items, _ in
+                let ids = items.compactMap { $0.hasPrefix(planDragPrefix) ? Int64($0.dropFirst(planDragPrefix.count)) : nil }
+                guard !ids.isEmpty else { return false }
+                return model.write { db in
+                    for id in ids {
+                        // Only items of this trip that I may change, and only when the day really changes.
+                        guard let p = try Q.plan(db, id), p.tripId == trip.id, !trip.readOnly || p.pending, p.date != day else { continue }
+                        try Q.setPlanDate(db, id, day)
+                    }
+                }
+            } isTargeted: { targeted = $0 }
+    }
+}
+
 /// A small "+ 新增" / "+ 加入" button beside a heading.
 struct SmallAdd: View {
     let text: String
@@ -371,13 +418,17 @@ private struct PlanTab: View {
     private func byDayList(_ plans: [PlanRow], notes: [Int64: String]) -> some View {
         let unscheduled = plans.filter { $0.date == nil }
         let looseNote = notes[unscheduledDay]
-        if !unscheduled.isEmpty || looseNote != nil {
-            SectionHeader("待排 · \(unscheduled.count) 項")
-            if let looseNote { DayNoteCard(text: looseNote, onEdit: noteEditor(unscheduledDay)).id(looseNote) }
-            if !unscheduled.isEmpty { PlanCard(rows: unscheduled, trip: trip, showDate: false) }
+        if !plans.isEmpty || looseNote != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader("待排 · \(unscheduled.count) 項")
+                if let looseNote { DayNoteCard(text: looseNote, onEdit: noteEditor(unscheduledDay)).id(looseNote) }
+                if !unscheduled.isEmpty { PlanCard(rows: unscheduled, trip: trip, showDate: false) }
+            }
+            .modifier(PlanDropTarget(trip: trip, day: nil))
         }
         ForEach(Array(trip.startDate ... max(trip.startDate, trip.endDate)), id: \.self) { day in
             let rows = plans.filter { $0.date == day }
+            VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 0) {
                 Text("Day \(day - trip.startDate + 1)").appFont(size: 16, weight: .semibold).foregroundStyle(Palette.primary).fixedSize()
                 Text("  \(fmtShortDate(day))").appFont(size: 16, weight: .semibold).lineLimit(1)
@@ -395,9 +446,13 @@ private struct PlanTab: View {
             if let n = notes[day] { DayNoteCard(text: n, onEdit: noteEditor(day)).id(n) }
             if rows.isEmpty {
                 Text("還沒有安排").appFont(size: 15).foregroundStyle(Palette.textMuted).padding(.leading, 4)
+                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
             } else {
                 PlanCard(rows: rows, trip: trip, showDate: false)
             }
+            }
+            // Drop a plan item anywhere on a day to move it there.
+            .modifier(PlanDropTarget(trip: trip, day: day))
         }
         let outside = plans.filter { p in p.date.map { $0 < trip.startDate || $0 > trip.endDate } ?? false }
         if !outside.isEmpty {
@@ -530,6 +585,24 @@ private struct PlanRowItem: View {
             .buttonStyle(.plain)
         }
         .padding(.leading, 8).padding(.trailing, 6).padding(.vertical, 5)
+        // Hold and drag to another day or to 待排 (what may be changed: my own trip's items, or my additions).
+        .modifier(PlanDrag(id: p.id, title: p.title, enabled: canTick))
+        // The same move without dragging: hold the row and pick a day.
+        .contextMenu {
+            if canTick {
+                Menu {
+                    if p.date != nil {
+                        Button { model.write { try Q.setPlanDate($0, p.id, nil) } } label: { Label("待排", systemImage: "tray") }
+                    }
+                    ForEach(Array(trip.startDate ... max(trip.startDate, trip.endDate)), id: \.self) { day in
+                        if p.date != day {
+                            Button("Day \(day - trip.startDate + 1) · \(fmtShortDate(day))") { model.write { try Q.setPlanDate($0, p.id, day) } }
+                        }
+                    }
+                } label: { Label("移到…", systemImage: "calendar") }
+                Button { model.planEditing = PlanEditTarget(tripId: trip.id ?? 0, planId: p.id) } label: { Label("編輯", systemImage: "pencil") }
+            }
+        }
     }
 
     private func tags(_ p: PlanRow) -> [(String, Color)] {

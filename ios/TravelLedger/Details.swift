@@ -50,6 +50,7 @@ struct PlanDetailView: View {
     @State private var viewing: Int?
     @State private var confirmDelete = false
     @State private var mapTarget: MapTarget?
+    @State private var drawing: DrawTarget?
 
     var body: some View {
         let plan = model.read { try Q.plan($0, planId) } ?? nil
@@ -87,6 +88,11 @@ struct PlanDetailView: View {
             Text("已記的支出會保留,只是不再連到這個行程。")
         }
         .mapLauncher($mapTarget)
+        .fullScreenCover(item: $drawing) { target in
+            DrawingSheet(title: target.path == nil ? "手寫便條" : "在圖上畫記", background: target.path.flatMap(model.storedImage)) { data in
+                saveDrawing(data, over: target.path)
+            }
+        }
         .fullScreenCover(item: Binding(get: { viewing.map(ViewerStart.init) }, set: { viewing = $0?.index })) { start in
             PhotoViewer(paths: (model.read { try Q.planPhotos($0, planId: planId) } ?? []).map { ($0.path, nil) }, start: start.index)
         }
@@ -143,7 +149,8 @@ struct PlanDetailView: View {
                 .ledgerCard(padding: 14)
             }
 
-            if !pictures.isEmpty {
+            let canDraw = !t.readOnly || p.pending
+            if !pictures.isEmpty || canDraw {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(pictures.indices, id: \.self) { i in
@@ -151,6 +158,32 @@ struct PlanDetailView: View {
                                 LocalImage(path: pictures[i].path, maxPixel: 300) { Palette.surfaceVariant }
                                     .frame(width: 88, height: 88)
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("圖片 \(i + 1)")
+                            .overlay(alignment: .bottomTrailing) {
+                                // Circle, arrow or write on a copy of this picture.
+                                if canDraw {
+                                    Button { drawing = DrawTarget(path: pictures[i].path) } label: {
+                                        Image(systemName: "pencil.tip.crop.circle.fill").font(.system(size: 24))
+                                            .symbolRenderingMode(.palette).foregroundStyle(.white, Palette.primary)
+                                            .frame(width: 44, height: 44, alignment: .bottomTrailing).padding(4)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("在這張圖上畫記")
+                                }
+                            }
+                        }
+                        if canDraw, pictures.count < maxPlanPictures {
+                            Button { drawing = DrawTarget(path: nil) } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "pencil.and.scribble").font(.system(size: 22))
+                                    Text("手寫便條").appFont(size: 13, weight: .medium).lineLimit(1).fixedSize()
+                                }
+                                .foregroundStyle(Palette.primary)
+                                .frame(minWidth: 88, minHeight: 88)
+                                .padding(.horizontal, 6)
+                                .background(Palette.primaryContainer, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -173,6 +206,27 @@ struct PlanDetailView: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 32)
         .readableWidth()
+    }
+
+    /// Keeps a drawing as one more picture of this plan item. Drawn over a picture, the original stays — unless
+    /// the item already has its nine pictures, in which case the drawn-on copy takes the original's place.
+    private func saveDrawing(_ data: Data, over original: String?) {
+        guard let path = try? model.files.write(data, folder: "photos/plans") else {
+            model.show("儲存失敗")
+            return
+        }
+        let size = UIImage(data: data)?.size ?? .zero
+        var replaced: String?
+        let ok = model.write { db in
+            let existing = try Q.planPhotos(db, planId: planId)
+            if existing.count >= maxPlanPictures, let original, let old = existing.first(where: { $0.path == original }) {
+                try db.execute(sql: "DELETE FROM plan_photo WHERE id = ?", arguments: [old.id])
+                replaced = old.path
+            }
+            var photo = PlanPhoto(planItemId: planId, path: path, width: Int(size.width), height: Int(size.height))
+            try photo.insert(db)
+        }
+        if ok { model.files.delete(replaced) } else { model.files.delete(path) }
     }
 
     @ViewBuilder private func actions(_ p: PlanItem, _ t: Trip) -> some View {

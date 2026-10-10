@@ -53,6 +53,11 @@ struct ExpenseEditView: View {
     /// What was read from the last receipt, waiting for 套用 or 略過.
     @State private var receipt: ReceiptGuess?
     @State private var viewing: Int?
+    /// Drawing on one of the photos.
+    @State private var drawingOn: Int?
+    /// Files to remove once the expense is saved (replaced by a drawn-on copy) or if it is not saved (the copies).
+    @State private var replacedFiles: [String] = []
+    @State private var copyFiles: [String] = []
 
     enum Field { case title, note }
 
@@ -139,6 +144,11 @@ struct ExpenseEditView: View {
         }
         .fullScreenCover(item: Binding(get: { viewing.map(ViewerStart.init) }, set: { viewing = $0?.index })) { start in
             PhotoViewer(paths: photos.map { ($0.path, $0.type) }, start: start.index)
+        }
+        .fullScreenCover(item: Binding(get: { drawingOn.map(ViewerStart.init) }, set: { drawingOn = $0?.index })) { start in
+            DrawingSheet(title: "在照片上畫記", background: photos.indices.contains(start.index) ? model.storedImage(photos[start.index].path) : nil) { data in
+                replacePhoto(start.index, with: data)
+            }
         }
         .alert("1 \(currency) = ? 新台幣", isPresented: $editingRate) {
             TextField("匯率", text: $rateDraft).keyboardType(.decimalPad)
@@ -276,6 +286,16 @@ struct ExpenseEditView: View {
                                     .padding(4)
                             }
                             .accessibilityLabel("移除照片")
+                        }
+                        .overlay(alignment: .bottomTrailing) {
+                            // Circle an amount, mark whose item it is…
+                            Button { drawingOn = i } label: {
+                                Image(systemName: "pencil.tip.crop.circle.fill").font(.system(size: 24))
+                                    .symbolRenderingMode(.palette).foregroundStyle(.white, Palette.primary)
+                                    .frame(width: 40, height: 40, alignment: .bottomTrailing).padding(4)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("在這張照片上畫記")
                         }
                     }
                 }
@@ -433,6 +453,23 @@ struct ExpenseEditView: View {
         if type == PhotoType.receipt, read.guess.hasData { receipt = read.guess }
     }
 
+    /// An expense holds three photos at most, so the drawn-on copy takes the photo's place.
+    private func replacePhoto(_ i: Int, with data: Data) {
+        guard photos.indices.contains(i) else { return }
+        let folder = photos[i].type == PhotoType.receipt ? "photos/receipts" : "photos/memories"
+        guard let path = try? model.files.write(data, folder: folder) else {
+            model.show("儲存失敗")
+            return
+        }
+        let old = photos[i].path
+        if photos[i].id == nil { model.files.delete(old) } else { replacedFiles.append(old) } // a saved one goes on save
+        copyFiles.append(path)
+        let size = UIImage(data: data)?.size ?? .zero
+        photos[i].path = path
+        photos[i].width = Int(size.width)
+        photos[i].height = Int(size.height)
+    }
+
     private func toggleType(_ i: Int) {
         guard photos.indices.contains(i) else { return }
         photos[i].type = photos[i].type == PhotoType.receipt ? PhotoType.memory : PhotoType.receipt
@@ -447,6 +484,7 @@ struct ExpenseEditView: View {
     /// Leaving without saving: photos added this time are thrown away.
     private func close() {
         photos.filter { $0.id == nil }.forEach { model.files.delete($0.path) }
+        model.files.delete(copyFiles) // drawn-on copies of photos whose originals stay
         dismiss()
     }
 
@@ -477,6 +515,7 @@ struct ExpenseEditView: View {
         var removed: [String] = []
         if model.write({ removed = try Q.saveExpense($0, e, photos: toSave).removed }) {
             model.files.delete(removed)
+            model.files.delete(replacedFiles)
             libraryFiles.forEach(saveToPhotoLibrary)
             dismiss()
         } else {

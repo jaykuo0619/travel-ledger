@@ -283,6 +283,11 @@ public enum Q {
         return paths
     }
 
+    /// Moves a plan item to another day (nil = 待排); its time of day stays.
+    public static func setPlanDate(_ db: Database, _ id: Int64, _ date: Int64?) throws {
+        try db.execute(sql: "UPDATE plan_item SET date = ? WHERE id = ?", arguments: [date, id])
+    }
+
     public static func setPlanStatus(_ db: Database, _ id: Int64, _ status: String) throws {
         try db.execute(sql: "UPDATE plan_item SET status = ? WHERE id = ?", arguments: [status, id])
     }
