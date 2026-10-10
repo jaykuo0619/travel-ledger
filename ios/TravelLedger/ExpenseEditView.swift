@@ -3,6 +3,7 @@ import Photos
 import PhotosUI
 import SwiftUI
 import UIKit
+import Vision
 
 /// Which expense the editor is open for (nil expenseId = a new one, optionally for a plan item).
 struct ExpenseEditTarget: Identifiable, Hashable {
@@ -45,8 +46,12 @@ struct ExpenseEditView: View {
     @State private var pickingCurrency = false
     @State private var confirmDelete = false
     @State private var photoItems: [PhotosPickerItem] = []
-    @State private var takingPhoto = false
+    /// The camera is up: for a receipt (read it) or for a memory (just keep it).
+    @State private var camera: CameraMode?
     @State private var processing = false
+    @State private var ocrText = ""
+    /// What was read from the last receipt, waiting for 套用 or 略過.
+    @State private var receipt: ReceiptGuess?
     @State private var viewing: Int?
 
     enum Field { case title, note }
@@ -58,19 +63,26 @@ struct ExpenseEditView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        titleField
-                        categoryRow
-                        paymentRow
-                        noteField
-                        photoRow
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            titleField
+                            categoryRow
+                            paymentRow
+                            noteField
+                            if let receipt { receiptCard(receipt).id("receipt") }
+                            photoRow
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                        .padding(.bottom, 16)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                    .padding(.bottom, 16)
+                    .scrollDismissesKeyboard(.interactively)
+                    // What was read from a receipt comes into view by itself (its buttons sit under the keypad otherwise).
+                    .onChange(of: receipt) { _, now in
+                        if now != nil { withAnimation { proxy.scrollTo("receipt", anchor: .bottom) } }
+                    }
                 }
-                .scrollDismissesKeyboard(.interactively)
                 // The keypad makes room for the keyboard while a text field is being typed in.
                 if !keyboardUp {
                     KeypadPanel(amount: amount, currency: currency, rate: rate, home: homeAmount, canSave: homeAmount != nil,
@@ -118,9 +130,9 @@ struct ExpenseEditView: View {
         .sheet(isPresented: $pickingCurrency) {
             CurrencyPickerSheet(current: currency) { setCurrency($0) }
         }
-        .fullScreenCover(isPresented: $takingPhoto) {
+        .fullScreenCover(item: $camera) { mode in
             CameraPicker { image in
-                if let image { Task { await addImage(image) } }
+                if let image { Task { await addImage(image, mode: mode == .receipt ? PhotoType.receipt : PhotoType.memory) } }
             }
             .ignoresSafeArea()
         }
@@ -267,19 +279,55 @@ struct ExpenseEditView: View {
                     }
                 }
             }
-            HStack(spacing: 8) {
+            // 拍收據 reads the amount, shop and date; 拍照 keeps a memory; 相簿 decides from the picture.
+            FlowLayout(spacing: 8, lineSpacing: 8) {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                    photoButton("拍照", "camera") { takingPhoto = true }
+                    photoButton("拍收據", "doc.text.viewfinder") { camera = .receipt }
+                    photoButton("拍照", "camera") { camera = .memory }
                 }
                 PhotosPicker(selection: $photoItems, maxSelectionCount: max(maxExpensePhotos - photos.count, 1), matching: .images) {
                     photoLabel("相簿", "photo.on.rectangle")
                 }
                 .disabled(full || processing)
-                if processing || full {
-                    Text(processing ? "處理照片中…" : "已滿 \(maxExpensePhotos) 張").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
-                }
+            }
+            if processing || full {
+                Text(processing ? "處理照片中…" : "已滿 \(maxExpensePhotos) 張").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
             }
         }
+    }
+
+    /// 「從收據讀到」: what was recognized, to apply or ignore.
+    private func receiptCard(_ g: ReceiptGuess) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("從收據讀到", systemImage: "doc.text.magnifyingglass").appFont(size: 16, weight: .semibold)
+            if let store = g.store { Text("店家:\(store)").appFont(size: 15) }
+            if let total = g.total { Text("金額:\(fmtAmount(total, g.currency ?? currency))").appFont(size: 15).tnum() }
+            if let d = g.date { Text("時間:\(fmtShortDateTime(d, g.minuteOfDay))").appFont(size: 15) }
+            HStack(spacing: 10) {
+                Spacer(minLength: 0)
+                Button("略過") { receipt = nil }.appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant).frame(minWidth: 60, minHeight: 44)
+                Button { applyReceipt(g) } label: {
+                    Text("套用").appFont(size: 15, weight: .semibold).foregroundStyle(Palette.onPrimary)
+                        .padding(.horizontal, 18).frame(minHeight: 40)
+                        .background(Palette.primary, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .foregroundStyle(Palette.onBackground)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.primaryContainer.opacity(0.6), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
+    }
+
+    /// The name only when none was typed; a different currency switches (with its rate); amount, date and time are taken.
+    private func applyReceipt(_ g: ReceiptGuess) {
+        if let store = g.store, title.isBlank { title = store }
+        if let c = g.currency, c != currency { setCurrency(c) }
+        if let total = g.total { amount = fmtNumber(total) }
+        if let d = g.date { date = d }
+        if let m = g.minuteOfDay { minuteOfDay = m }
+        receipt = nil
     }
 
     private func photoButton(_ text: String, _ symbol: String, action: @escaping () -> Void) -> some View {
@@ -314,6 +362,7 @@ struct ExpenseEditView: View {
             minuteOfDay = e.minuteOfDay
             note = e.note
             noteOpen = !e.note.isBlank
+            ocrText = e.ocrText
             photos = model.read { try Q.photos($0, expenseId: id) } ?? []
             var seen = Set<String>()
             currencies = ([homeCurrency] + tripRates.keys.sorted() + [e.currency]).filter { seen.insert($0).inserted }
@@ -343,28 +392,42 @@ struct ExpenseEditView: View {
                 model.show("無法讀取這張照片")
                 continue
             }
-            await store(data)
+            await store(data, mode: nil)
         }
     }
 
-    private func addImage(_ image: UIImage) async {
+    private func addImage(_ image: UIImage, mode: String) async {
         processing = true
         defer { processing = false }
         guard let data = image.jpegData(compressionQuality: 0.95) else { return }
-        await store(data)
+        await store(data, mode: mode)
     }
 
-    /// Keeps a photo as a memory, downscaled to 1200 px (photo/PhotoProcessor.kt); the badge switches it to a receipt.
-    private func store(_ data: Data) async {
-        guard photos.count < maxExpensePhotos,
-              let jpeg = await Task.detached(operation: { downscaledJPEG(data, maxEdge: 1200, quality: 0.82) }).value,
-              let path = try? model.files.write(jpeg, folder: "photos/memories")
+    /// Keeps a photo (photo/PhotoProcessor.kt). [mode]: RECEIPT reads it, MEMORY just keeps it, nil decides from
+    /// the content (pictures from the library). Receipts are kept at 1600 px, memories at 1200.
+    private func store(_ data: Data, mode: String?) async {
+        guard photos.count < maxExpensePhotos else { return }
+        let hint = currency
+        let read: (lines: [OcrLine], guess: ReceiptGuess) = mode == PhotoType.memory
+            ? ([], ReceiptGuess(isReceipt: false))
+            : await Task.detached(priority: .userInitiated) {
+                let lines = recognizeText(data, currency: hint)
+                return (lines, ReceiptParser.parse(lines, force: mode == PhotoType.receipt))
+            }.value
+        let type = read.guess.isReceipt ? PhotoType.receipt : PhotoType.memory
+        let edge: CGFloat = type == PhotoType.receipt ? 1600 : 1200
+        guard let jpeg = await Task.detached(operation: { downscaledJPEG(data, maxEdge: edge, quality: 0.82) }).value,
+              let path = try? model.files.write(jpeg, folder: type == PhotoType.receipt ? "photos/receipts" : "photos/memories")
         else {
             model.show("無法讀取這張照片")
             return
         }
         let size = UIImage(data: jpeg)?.size ?? .zero
-        photos.append(Photo(expenseId: original?.id ?? 0, type: PhotoType.memory, path: path, width: Int(size.width), height: Int(size.height)))
+        photos.append(Photo(expenseId: original?.id ?? 0, type: type, path: path, width: Int(size.width), height: Int(size.height)))
+        // The recognized text is kept with the expense (top to bottom), and offered as a receipt when it reads like one.
+        let text = read.lines.sorted { $0.top < $1.top }.map(\.text).joined(separator: "\n")
+        if !text.isBlank { ocrText = [ocrText, text].filter { !$0.isBlank }.joined(separator: "\n") }
+        if type == PhotoType.receipt, read.guess.hasData { receipt = read.guess }
     }
 
     private func toggleType(_ i: Int) {
@@ -397,6 +460,7 @@ struct ExpenseEditView: View {
         e.categoryId = categoryId
         e.paymentMethodId = paymentId
         e.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        e.ocrText = ocrText
         if original == nil { e.planItemId = target.planId }
 
         // New memory photos also go to the photo library when the setting says so.
@@ -425,6 +489,32 @@ struct ExpenseEditView: View {
             photos.filter { $0.id == nil }.forEach { model.files.delete($0.path) }
             dismiss()
         }
+    }
+}
+
+enum CameraMode: String, Identifiable {
+    case receipt, memory
+    var id: String { rawValue }
+}
+
+/// Reads the text in a picture on the device (Vision), as lines with their boxes in pixels from the top-left.
+/// The script follows the currency being recorded: JPY → Japanese, KRW → Korean, otherwise Chinese + English.
+func recognizeText(_ data: Data, currency: String) -> [OcrLine] {
+    guard let jpeg = downscaledJPEG(data, maxEdge: 2400, quality: 0.9), let image = UIImage(data: jpeg)?.cgImage else { return [] }
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = false
+    switch currency {
+    case "JPY": request.recognitionLanguages = ["ja-JP", "en-US"]
+    case "KRW": request.recognitionLanguages = ["ko-KR", "en-US"]
+    default: request.recognitionLanguages = ["zh-Hant", "zh-Hans", "en-US"]
+    }
+    do { try VNImageRequestHandler(cgImage: image, options: [:]).perform([request]) } catch { return [] }
+    let w = Double(image.width), h = Double(image.height)
+    return (request.results ?? []).compactMap { o in
+        guard let text = o.topCandidates(1).first?.string else { return nil }
+        let b = o.boundingBox // normalized, origin at the bottom-left
+        return OcrLine(text, Int(b.minX * w), Int((1 - b.maxY) * h), Int(b.maxX * w), Int((1 - b.minY) * h))
     }
 }
 
