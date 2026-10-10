@@ -59,9 +59,12 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal, 14).padding(.vertical, 12)
                     Divider().overlay(Palette.hairline)
-                    HStack(alignment: .lastTextBaseline, spacing: 0) {
-                        Text("作者 ").font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
-                        AuthorSignature(size: 22)
+                    VStack(spacing: 4) {
+                        HStack(alignment: .lastTextBaseline, spacing: 0) {
+                            Text("作者 ").font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant)
+                            AuthorSignature(size: 22)
+                        }
+                        Text(verbatim: "Design by Archie Kuo").font(.system(size: 13)).foregroundStyle(Palette.onSurfaceVariant)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
