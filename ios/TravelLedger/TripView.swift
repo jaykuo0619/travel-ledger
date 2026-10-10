@@ -94,6 +94,7 @@ struct TripView: View {
             Label(tab.rawValue, systemImage: tab.symbol)
                 .appFont(size: 15, weight: .semibold)
                 .foregroundStyle(Palette.onSurfaceVariant)
+                .modifier(ColumnTitleTarget(on: tab == .plan))
                 .padding(.horizontal, 20).padding(.top, 4).padding(.bottom, 6)
             content()
         }
@@ -116,8 +117,17 @@ struct TripView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     VStack(alignment: .leading, spacing: 0) {
                         Text(trip.name).appFont(size: 21, weight: .bold).lineLimit(1)
-                        Text("\(tripStatus(start: trip.startDate, end: trip.endDate, today: today)) · \(fmtShortDate(trip.startDate)) – \(fmtShortDate(trip.endDate))")
-                            .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1).minimumScaleFactor(0.85)
+                        // One line when it fits; otherwise the status goes above the dates. Never shrunk or cut.
+                        let status = tripStatus(start: trip.startDate, end: trip.endDate, today: today)
+                        let dates = "\(fmtShortDate(trip.startDate)) – \(fmtShortDate(trip.endDate))"
+                        ViewThatFits(in: .horizontal) {
+                            Text(verbatim: "\(status) · \(dates)").lineLimit(1)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(status).lineLimit(1)
+                                Text(dates).lineLimit(1)
+                            }
+                        }
+                        .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -146,12 +156,17 @@ struct TripView: View {
 
 /// "X 記帳 · 10/12 21:05 更新" on a trip someone shared with us.
 struct ReadOnlyBanner: View {
+    @Environment(AppModel.self) private var model
     let trip: Trip
 
     var body: some View {
-        HStack(spacing: 8) {
+        let pending = model.read { try Q.pendingCount($0, trip.id ?? 0) } ?? 0
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "eye").font(.system(size: 15))
-            Text(text).appFont(size: 15)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text).appFont(size: 15)
+                if pending > 0 { Text(verbatim: "我補充了 \(pending) 項").appFont(size: 13).foregroundStyle(Palette.warning) }
+            }
             Spacer(minLength: 0)
         }
         .foregroundStyle(Palette.onSecondaryContainer)
@@ -198,6 +213,14 @@ private struct TabBar: View {
             .readableWidth()
         }
         .background(Palette.card.ignoresSafeArea(edges: .bottom))
+    }
+}
+
+/// In two-column mode there is no tab bar; the tutorial points at the first column's title instead.
+private struct ColumnTitleTarget: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        if on { content.coachTarget(.tripTabs) } else { content }
     }
 }
 

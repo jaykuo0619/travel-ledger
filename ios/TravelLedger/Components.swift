@@ -315,7 +315,7 @@ struct MetaItem: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: symbol).font(.system(size: 12))
-            Text(text).appFont(size: 13).lineLimit(1).fixedSize()
+            Text(text).appFont(size: 13).lineLimit(1)
         }
         .foregroundStyle(Palette.onSurfaceVariant)
     }
@@ -366,7 +366,7 @@ struct FlowLayout: Layout {
         for row in arrange(width: bounds.width, subviews: subviews) {
             var x = bounds.minX
             for i in row.items {
-                let size = subviews[i].sizeThatFits(.unspecified)
+                let size = fitted(subviews[i], width: bounds.width)
                 subviews[i].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
@@ -376,11 +376,18 @@ struct FlowLayout: Layout {
 
     private struct Row { var items: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
 
+    /// The item's own size, or what it needs when held to the row's width if it is wider than that.
+    private func fitted(_ view: LayoutSubview, width: CGFloat) -> CGSize {
+        let ideal = view.sizeThatFits(.unspecified)
+        guard ideal.width > width, width > 0 else { return ideal }
+        return view.sizeThatFits(ProposedViewSize(width: width, height: nil))
+    }
+
     private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
         var rows: [Row] = []
         var row = Row()
         for (i, view) in subviews.enumerated() {
-            let size = view.sizeThatFits(.unspecified)
+            let size = fitted(view, width: width)
             let needed = row.items.isEmpty ? size.width : row.width + spacing + size.width
             if needed > width, !row.items.isEmpty {
                 rows.append(row)

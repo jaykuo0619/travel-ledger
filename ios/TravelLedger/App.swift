@@ -62,6 +62,10 @@ struct RootView: View {
             }
         }
         .onChange(of: widthClass, initial: true) { _, new in model.layoutChanged(wide: new == .regular) }
+        // Swiping back to the list on a phone-width window: no trip is open any more.
+        .onChange(of: model.path.isEmpty) { _, empty in
+            if empty, !model.wide { model.selectedTrip = nil }
+        }
         .sheet(item: $model.editing) { target in
             TripEditView(tripId: target.tripId)
         }
@@ -103,6 +107,8 @@ struct RootView: View {
             Button("新增旅程") { model.editing = EditTarget(tripId: nil) }.keyboardShortcut("n", modifiers: .command)
             Button("設定") { model.openSettings() }.keyboardShortcut(",", modifiers: .command)
         }
+        // Not on top of a sheet that is already open, or of a settings screen that is already showing.
+        .disabled(model.editing != nil || model.showSettings || model.incoming != nil || (!model.wide && !model.path.isEmpty))
         .opacity(0)
         .accessibilityHidden(true)
     }
@@ -115,12 +121,13 @@ struct ToastView: View {
     var body: some View {
         if let text = model.toast {
             Text(text)
-                .font(.subheadline)
-                .foregroundStyle(.white)
+                .appFont(size: 15)
+                .foregroundStyle(Palette.background)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
-                .background(Capsule().fill(Color.black.opacity(0.82)))
+                // Dark on a light screen, light on a dark one, so it always stands out.
+                .background(Palette.onBackground.opacity(0.92), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .padding(.horizontal, 24)
                 .padding(.bottom, 40)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))

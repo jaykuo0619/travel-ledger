@@ -48,7 +48,7 @@ struct SettingsView: View {
                             IconTile(symbol: "trash", color: Palette.category(7), size: 40)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text("匯入後刪除原檔").appFont(size: 16)
-                                Text("從上面選的檔案,匯入成功後自動刪除;取消或失敗不會刪")
+                                Text("從上面選的檔案,匯入成功後自動刪除;取消、失敗或備份檔不會刪")
                                     .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                             }
                         }

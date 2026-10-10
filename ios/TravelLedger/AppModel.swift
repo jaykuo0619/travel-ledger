@@ -126,23 +126,33 @@ final class AppModel {
     /// [picked]: the user chose it in 設定 →「從檔案還原或匯入」 (the only files 匯入後刪除原檔 applies to).
     func receive(_ url: URL, picked: Bool = false) {
         pickedOriginal = nil
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("incoming", isDirectory: true)
         // A file that arrives while another is waiting replaces it; each has its own copy, so an import that
         // is already running keeps the file it started with.
         let previous = incoming
-        do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let copy = dir.appendingPathComponent(UUID().uuidString + ".zip")
-            try FileManager.default.copyItem(at: url, to: copy)
+        Task {
+            // Off the main thread: a backup with photos can be large.
+            let copy: URL? = await Task.detached(priority: .userInitiated) {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("incoming", isDirectory: true)
+                do {
+                    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    let copy = dir.appendingPathComponent(UUID().uuidString + ".zip")
+                    try FileManager.default.copyItem(at: url, to: copy)
+                    // Files opened from other apps land in Documents/Inbox; we keep our own copy only.
+                    if url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: url) }
+                    return copy
+                } catch {
+                    return nil
+                }
+            }.value
+            guard let copy else {
+                show("無法開啟這個檔案")
+                return
+            }
             if let previous { try? FileManager.default.removeItem(at: previous) }
-            // Files opened from other apps land in Documents/Inbox; we keep our own copy only.
-            if url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: url) }
             incoming = copy
             if picked { pickedOriginal = url }
-        } catch {
-            show("無法開啟這個檔案")
         }
     }
 
@@ -158,7 +168,8 @@ final class AppModel {
         case let .imported(kind, tripIds, updated):
             changed()
             // Only after the import went through; a cancelled or failed import leaves the file alone.
-            if settings.deleteImportedFile, let original { Self.deleteOriginal(original) }
+            // A backup is never deleted: it may be the only copy.
+            if settings.deleteImportedFile, kind != TripArchive.kindBackup, let original { Self.deleteOriginal(original) }
             let message: String
             switch kind {
             case TripArchive.kindPlans: message = "已併入電腦排的行程"

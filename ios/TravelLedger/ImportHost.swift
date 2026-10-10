@@ -169,7 +169,7 @@ private struct ImportConfirmSheet: View {
             ForEach(summary.trips.prefix(6), id: \.uuid) { t in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(t.name).appFont(size: 17, weight: .semibold)
-                    Text("\(fmtShortDate(t.startDate)) – \(fmtShortDate(t.endDate)) · \(t.expenseCount) 筆 · \(fmtMoney(t.totalHome))")
+                    Text(verbatim: "\(fmtShortDate(t.startDate)) – \(fmtShortDate(t.endDate)) · \(t.expenseCount) 筆 · \(fmtMoney(t.totalHome))")
                         .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                     if existing.contains(t.uuid) {
                         Text("手機上已有這趟旅程,會更新成這份").appFont(size: 13).foregroundStyle(Palette.primary)

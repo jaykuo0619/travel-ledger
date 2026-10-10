@@ -105,7 +105,7 @@ struct TripEditView: View {
                             .keyboardType(.decimalPad)
                             .appFont(size: 16)
                             .onChange(of: budget) { _, v in
-                                let f = v.filter { $0.isNumber || $0 == "." }
+                                let f = v.filter { ("0" ... "9").contains($0) || $0 == "." }
                                 if f != v { budget = f }
                             }
                     } trailing: {
@@ -133,11 +133,12 @@ struct TripEditView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { close() } label: { Image(systemName: "xmark") }.accessibilityLabel("關閉")
+                    Button { close() } label: { Image(systemName: "xmark") }.accessibilityLabel("關閉").disabled(coverBusy)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button { save() } label: { Image(systemName: "checkmark").fontWeight(.bold) }
-                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        // Not while a picked cover is still being written.
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || coverBusy)
                         .accessibilityLabel("儲存")
                 }
                 // The number pads have no Return key.
@@ -278,10 +279,10 @@ struct TripEditView: View {
                         .multilineTextAlignment(.trailing)
                         .appFont(size: 16).tnum()
                         .padding(.horizontal, 10).padding(.vertical, 8)
-                        .frame(width: 110)
+                        .frame(minWidth: 80, maxWidth: 110)
                         .background(Palette.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .onChange(of: r.value) { _, v in
-                            let f = v.filter { $0.isNumber || $0 == "." }
+                            let f = v.filter { ("0" ... "9").contains($0) || $0 == "." }
                             if f != v { r.value = f }
                         }
                     Button { rates.removeAll { $0.currency == r.currency } } label: {
@@ -536,7 +537,7 @@ struct CurrencyPickerSheet: View {
                             .autocorrectionDisabled()
                             .appFont(size: 16)
                             .onChange(of: custom) { _, v in
-                                let f = String(v.uppercased().filter { $0.isLetter }.prefix(3))
+                                let f = String(v.uppercased().filter { $0.isASCII && $0.isLetter }.prefix(3))
                                 if f != v { custom = f }
                             }
                     } trailing: {
