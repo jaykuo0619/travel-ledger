@@ -331,8 +331,7 @@ struct TripEditView: View {
             var newId: Int64?
             if model.write({ newId = try Q.createTrip($0, trip, members: members, rates: rateRows) }), let newId {
                 dismiss()
-                model.path = NavigationPath()
-                model.path.append(Route.trip(newId))
+                model.openTrip(newId)
             }
         } else {
             if model.write({ try Q.updateTrip($0, trip, members: members, rates: rateRows) }) { dismiss() }

@@ -27,17 +27,34 @@ struct TripView: View {
         let today = todayEpochDay()
         if let trip = model.read({ try Q.trip($0, tripId) }) ?? nil {
             let current = tab ?? ShownTab.default(trip, today: today)
-            VStack(spacing: 0) {
-                header(trip, today: today).readableWidth()
-                if trip.readOnly { ReadOnlyBanner(trip: trip).padding(.horizontal, 16).padding(.vertical, 4).readableWidth() }
-                Group {
-                    switch current {
-                    case .plan: PlanTab(trip: trip)
-                    case .ledger: LedgerTab(trip: trip, today: today)
+            GeometryReader { geo in
+                // On an iPad with room for two columns the plan and the ledger are both on screen, no tabs.
+                let columns = model.wide && geo.size.width >= 720
+                VStack(spacing: 0) {
+                    header(trip, today: today).frame(maxWidth: columns ? .infinity : 700).frame(maxWidth: .infinity)
+                    if trip.readOnly {
+                        ReadOnlyBanner(trip: trip).padding(.horizontal, 16).padding(.vertical, 4)
+                            .frame(maxWidth: columns ? .infinity : 700).frame(maxWidth: .infinity)
+                    }
+                    if columns {
+                        HStack(spacing: 0) {
+                            column(ShownTab.plan) { PlanTab(trip: trip) }
+                                .frame(width: (geo.size.width * 0.54).rounded())
+                            Divider().overlay(Palette.hairline)
+                            column(ShownTab.ledger) { LedgerTab(trip: trip, today: today) }
+                        }
+                        .frame(maxHeight: .infinity)
+                    } else {
+                        Group {
+                            switch current {
+                            case .plan: PlanTab(trip: trip)
+                            case .ledger: LedgerTab(trip: trip, today: today)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        TabBar(current: current) { tab = $0 }
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                TabBar(current: current) { tab = $0 }
             }
             .background(Palette.background)
             .toolbar(.hidden, for: .navigationBar)
@@ -45,7 +62,7 @@ struct TripView: View {
                 Button("取消", role: .cancel) {}
                 Button("刪除", role: .destructive) {
                     model.deleteTrip(tripId)
-                    model.path = NavigationPath()
+                    model.closeTrip()
                 }
             } message: {
                 Text(trip.readOnly ? "只會刪除你手機上的這份副本,不影響\(trip.sharedBy ?? "")的資料。" : "旅程內的所有帳目、行程與照片都會一併刪除,無法復原。")
@@ -55,13 +72,28 @@ struct TripView: View {
         }
     }
 
+    /// One of the two side-by-side columns on an iPad, under a small title.
+    private func column<Content: View>(_ tab: ShownTab, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Label(tab.rawValue, systemImage: tab.symbol)
+                .appFont(size: 15, weight: .semibold)
+                .foregroundStyle(Palette.onSurfaceVariant)
+                .padding(.horizontal, 20).padding(.top, 4).padding(.bottom, 6)
+            content()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
     private func header(_ trip: Trip, today: Int64) -> some View {
         HStack(spacing: 4) {
-            Button { model.path = NavigationPath() } label: {
-                Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold)).frame(width: 36, height: 44)
+            // Beside the sidebar there is nothing to go back to.
+            if !model.wide {
+                Button { model.closeTrip() } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold)).frame(width: 36, height: 44)
+                }
+                .accessibilityLabel("所有旅程")
             }
-            .accessibilityLabel("所有旅程")
-            Button { model.path = NavigationPath() } label: {
+            Button { model.closeTrip() } label: {
                 HStack(spacing: 10) {
                     TripCover(path: trip.coverPath, name: trip.name, startDate: trip.startDate, theme: trip.coverTheme)
                         .frame(width: 40, height: 40)
@@ -79,7 +111,7 @@ struct TripView: View {
                 if !trip.readOnly {
                     Button { model.editing = EditTarget(tripId: tripId) } label: { Label("編輯旅程", systemImage: "pencil") }
                 }
-                Button { model.path = NavigationPath() } label: { Label("所有旅程", systemImage: "suitcase.rolling") }
+                Button { model.closeTrip() } label: { Label("所有旅程", systemImage: "suitcase.rolling") }
                 Button(role: .destructive) { confirmDelete = true } label: { Label("刪除旅程", systemImage: "trash") }
             } label: {
                 Image(systemName: "ellipsis").font(.system(size: 18, weight: .semibold)).rotationEffect(.degrees(90))
@@ -88,7 +120,7 @@ struct TripView: View {
             .accessibilityLabel("更多")
         }
         .foregroundStyle(Palette.onBackground)
-        .padding(.leading, 6)
+        .padding(.leading, model.wide ? 16 : 6)
         .padding(.trailing, 4)
         .frame(minHeight: 64)
     }

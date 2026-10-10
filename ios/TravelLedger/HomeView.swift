@@ -4,7 +4,10 @@ import SwiftUI
 /// The trip list (ui/HomeScreen.kt).
 struct HomeView: View {
     @Environment(AppModel.self) private var model
+    /// On an iPad this list is the sidebar: every trip is a compact row and the open one is marked.
+    var sidebar = false
     @State private var filter: TripFilter?
+    @State private var deleting: TripSummary?
 
     var body: some View {
         let today = todayEpochDay()
@@ -16,8 +19,8 @@ struct HomeView: View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 // With an active or upcoming trip the list is a switcher; adding is a small "+" in the header.
-                header(showAdd: activeCount > 0)
-                if activeCount == 0 {
+                header(showAdd: sidebar || activeCount > 0)
+                if activeCount == 0, !sidebar {
                     PillButton("新增旅程", symbol: "plus", height: 50) { model.editing = EditTarget(tripId: nil) }
                 }
                 if !trips.isEmpty {
@@ -25,23 +28,31 @@ struct HomeView: View {
                         .active: activeCount, .ended: trips.count - activeCount, .all: trips.count,
                     ]) { filter = $0 }
                 }
-                if shown.isEmpty {
+                if shown.isEmpty, !(sidebar && trips.isEmpty) {
                     EmptyState(symbol: "airplane.departure", title: trips.isEmpty ? "還沒有旅程" : "這裡沒有旅程",
                                message: trips.isEmpty ? "建立第一趟旅程,開始記錄每一筆花費" : "切換上方分頁看看其他旅程")
                 }
                 ForEach(shown) { t in
-                    Button { model.path.append(Route.trip(t.id)) } label: {
-                        if t.id == shown.first?.id { FeaturedTripCard(trip: t, today: today) } else { CompactTripCard(trip: t, today: today) }
+                    Button { model.openTrip(t.id) } label: {
+                        if sidebar {
+                            CompactTripCard(trip: t, today: today, selected: t.id == model.selectedTrip)
+                        } else if t.id == shown.first?.id {
+                            FeaturedTripCard(trip: t, today: today)
+                        } else {
+                            CompactTripCard(trip: t, today: today)
+                        }
                     }
                     .buttonStyle(PressStyle())
+                    .tripActions(t, deleting: $deleting)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, sidebar ? 12 : 16)
             .padding(.bottom, 32)
             .readableWidth()
         }
         .background(Palette.background)
         .toolbar(.hidden, for: .navigationBar)
+        .deleteTripAlert($deleting)
     }
 
     private func header(showAdd: Bool) -> some View {
@@ -66,7 +77,7 @@ struct HomeView: View {
                 }
                 .accessibilityLabel("新增旅程")
             }
-            Button { model.path.append(Route.settings) } label: {
+            Button { model.openSettings() } label: {
                 Image(systemName: "gearshape").font(.system(size: 20)).frame(width: 44, height: 44)
             }
             .foregroundStyle(Palette.onBackground)
@@ -182,6 +193,7 @@ private struct FeaturedTripCard: View {
 private struct CompactTripCard: View {
     let trip: TripSummary
     let today: Int64
+    var selected = false
 
     var body: some View {
         let t = trip
@@ -203,5 +215,96 @@ private struct CompactTripCard: View {
         }
         .foregroundStyle(Palette.onBackground)
         .ledgerCard(padding: 10)
+        .overlay {
+            if selected {
+                RoundedRectangle(cornerRadius: Radius.large, style: .continuous).strokeBorder(Palette.primary, lineWidth: 2)
+            }
+        }
+    }
+}
+
+// MARK: - iPad
+
+/// What the iPad shows beside the sidebar while no trip is open: every trip as a large card.
+struct TripOverview: View {
+    @Environment(AppModel.self) private var model
+    @State private var deleting: TripSummary?
+
+    var body: some View {
+        let today = todayEpochDay()
+        let trips = TripFilter.all.apply(model.read { try Q.tripSummaries($0) } ?? [], today: today)
+        ScrollView {
+            if trips.isEmpty {
+                VStack(spacing: 20) {
+                    EmptyState(symbol: "airplane.departure", title: "還沒有旅程", message: "建立第一趟旅程,開始記錄每一筆花費")
+                    PillButton("新增旅程", symbol: "plus", height: 50) { model.editing = EditTarget(tripId: nil) }
+                        .frame(maxWidth: 320)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("所有旅程").appFont(size: 21, weight: .bold).foregroundStyle(Palette.onBackground)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 300, maximum: 460), spacing: 16, alignment: .top)], spacing: 16) {
+                        ForEach(trips) { t in
+                            Button { model.openTrip(t.id) } label: { FeaturedTripCard(trip: t, today: today) }
+                                .buttonStyle(PressStyle())
+                                .tripActions(t, deleting: $deleting)
+                        }
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .background(Palette.background)
+        .toolbar(.hidden, for: .navigationBar)
+        .deleteTripAlert($deleting)
+    }
+}
+
+private extension View {
+    /// Pointer highlight and the long-press menu on a trip card.
+    func tripActions(_ trip: TripSummary, deleting: Binding<TripSummary?>) -> some View {
+        modifier(TripActions(trip: trip, deleting: deleting))
+    }
+
+    func deleteTripAlert(_ deleting: Binding<TripSummary?>) -> some View {
+        modifier(DeleteTripAlert(deleting: deleting))
+    }
+}
+
+private struct TripActions: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let trip: TripSummary
+    @Binding var deleting: TripSummary?
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(.hoverEffect, RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
+            .hoverEffect(.highlight)
+            .contextMenu {
+                if trip.sharedBy == nil {
+                    Button { model.editing = EditTarget(tripId: trip.id) } label: { Label("編輯旅程", systemImage: "pencil") }
+                }
+                Button(role: .destructive) { deleting = trip } label: { Label("刪除旅程", systemImage: "trash") }
+            }
+    }
+}
+
+/// The same question the trip screen asks before deleting.
+private struct DeleteTripAlert: ViewModifier {
+    @Environment(AppModel.self) private var model
+    @Binding var deleting: TripSummary?
+
+    func body(content: Content) -> some View {
+        content.alert("刪除這趟旅程?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { t in
+            Button("取消", role: .cancel) {}
+            Button("刪除", role: .destructive) {
+                model.deleteTrip(t.id)
+                if model.selectedTrip == t.id { model.closeTrip() }
+            }
+        } message: { t in
+            Text(t.sharedBy != nil ? "只會刪除你手機上的這份副本,不影響\(t.sharedBy ?? "")的資料。" : "旅程內的所有帳目、行程與照片都會一併刪除,無法復原。")
+        }
     }
 }

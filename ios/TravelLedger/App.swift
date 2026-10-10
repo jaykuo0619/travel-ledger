@@ -31,24 +31,47 @@ enum Route: Hashable {
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.horizontalSizeClass) private var widthClass
     @State private var openedAtLaunch = false
 
     var body: some View {
         @Bindable var model = model
-        NavigationStack(path: $model.path) {
-            HomeView()
-                .navigationDestination(for: Route.self) { route in
-                    switch route {
-                    case .trip(let id): TripView(tripId: id)
-                    case .plan(let id): PlanDetailView(planId: id)
-                    case .expense(let id): ExpenseDetailView(expenseId: id)
-                    case .settings: SettingsView()
+        Group {
+            if model.wide {
+                // iPad: the trips stay on the left, the open trip (or the overview) fills the rest.
+                HStack(spacing: 0) {
+                    HomeView(sidebar: true)
+                        .frame(width: 320)
+                    Divider().overlay(Palette.hairline).ignoresSafeArea()
+                    NavigationStack(path: $model.path) {
+                        Group {
+                            if let id = model.selectedTrip { TripView(tripId: id).id(id) } else { TripOverview() }
+                        }
+                        .navigationDestination(for: Route.self) { destination($0) }
                     }
                 }
+                .background(Palette.background)
+            } else {
+                NavigationStack(path: $model.path) {
+                    HomeView()
+                        .navigationDestination(for: Route.self) { destination($0) }
+                }
+            }
         }
+        .onChange(of: widthClass, initial: true) { _, new in model.layoutChanged(wide: new == .regular) }
         .sheet(item: $model.editing) { target in
             TripEditView(tripId: target.tripId)
         }
+        .sheet(isPresented: $model.showSettings) {
+            NavigationStack {
+                SettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("完成") { model.showSettings = false } }
+                    }
+            }
+            .tint(Palette.primary)
+        }
+        .background { shortcuts }
         .modifier(ImportHost())
         .overlay(alignment: .bottom) { ToastView() }
         .task {
@@ -56,10 +79,29 @@ struct RootView: View {
             guard !openedAtLaunch else { return }
             openedAtLaunch = true
             try? await Task.sleep(for: .milliseconds(150))
-            if model.incoming == nil, model.path.isEmpty, let id = model.tripToOpenAtLaunch() {
-                model.path.append(Route.trip(id))
+            if model.incoming == nil, model.path.isEmpty, model.selectedTrip == nil, let id = model.tripToOpenAtLaunch() {
+                model.openTrip(id)
             }
         }
+    }
+
+    @ViewBuilder private func destination(_ route: Route) -> some View {
+        switch route {
+        case .trip(let id): TripView(tripId: id)
+        case .plan(let id): PlanDetailView(planId: id)
+        case .expense(let id): ExpenseDetailView(expenseId: id)
+        case .settings: SettingsView()
+        }
+    }
+
+    /// With a keyboard attached: ⌘N new trip, ⌘, settings.
+    private var shortcuts: some View {
+        Group {
+            Button("新增旅程") { model.editing = EditTarget(tripId: nil) }.keyboardShortcut("n", modifiers: .command)
+            Button("設定") { model.openSettings() }.keyboardShortcut(",", modifiers: .command)
+        }
+        .opacity(0)
+        .accessibilityHidden(true)
     }
 }
 

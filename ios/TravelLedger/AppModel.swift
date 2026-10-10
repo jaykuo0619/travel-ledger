@@ -22,6 +22,11 @@ final class AppModel {
     private(set) var revision = 0
     var settings: AppSettings { didSet { settings.save() } }
     var path = NavigationPath()
+    /// True on an iPad at full width: trips sit in a sidebar and the open trip is [selectedTrip].
+    var wide = false
+    var selectedTrip: Int64?
+    /// Settings as a sheet (wide layout only; on a phone it is pushed).
+    var showSettings = false
     var editing: EditTarget?
     /// A file waiting to be imported (opened from LINE / Files, or picked in 設定).
     var incoming: URL?
@@ -78,6 +83,34 @@ final class AppModel {
         return LedgerCore.tripToOpenAtLaunch(trips, today: todayEpochDay())
     }
 
+    // MARK: Navigation
+
+    /// Opens a trip: beside the sidebar on an iPad, pushed on a phone.
+    func openTrip(_ id: Int64) {
+        selectedTrip = id
+        path = NavigationPath()
+        if !wide { path.append(Route.trip(id)) }
+    }
+
+    /// Back to all trips (the list on a phone, the overview on an iPad).
+    func closeTrip() {
+        selectedTrip = nil
+        path = NavigationPath()
+    }
+
+    func openSettings() {
+        if wide { showSettings = true } else { path.append(Route.settings) }
+    }
+
+    /// The window changed between phone-width and iPad-width: keep the same trip open.
+    func layoutChanged(wide: Bool) {
+        guard wide != self.wide else { return }
+        self.wide = wide
+        showSettings = false
+        path = NavigationPath()
+        if !wide, let id = selectedTrip { path.append(Route.trip(id)) }
+    }
+
     // MARK: Trips
 
     func deleteTrip(_ id: Int64) {
@@ -122,8 +155,7 @@ final class AppModel {
             default: message = "已還原 \(tripIds.count) 個旅程"
             }
             show(message)
-            path = NavigationPath()
-            if tripIds.count == 1 { path.append(Route.trip(tripIds[0])) }
+            if tripIds.count == 1 { openTrip(tripIds[0]) } else { closeTrip() }
         }
     }
 

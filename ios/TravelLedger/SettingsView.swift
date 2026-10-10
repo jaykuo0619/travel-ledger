@@ -83,7 +83,17 @@ struct SettingsView: View {
         }
         .fileImporter(isPresented: $picking, allowedContentTypes: [.zip]) { result in
             switch result {
-            case .success(let url): model.receive(url)
+            case .success(let url):
+                // On an iPad settings is a sheet; the import sheet can only follow once it has gone.
+                if model.showSettings {
+                    model.showSettings = false
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(450))
+                        model.receive(url)
+                    }
+                } else {
+                    model.receive(url)
+                }
             case .failure: model.show("無法開啟這個檔案")
             }
         }
