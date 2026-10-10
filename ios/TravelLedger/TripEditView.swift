@@ -61,7 +61,7 @@ struct TripEditView: View {
                         dateBox("回程", end) { picking = .end }
                     }
                     .fixedSize(horizontal: false, vertical: true)
-                    Text("\(start.civil.year) 年 · 共 \(end - start + 1) 天")
+                    Text(verbatim: "\(start.civil.year) 年 · 共 \(end - start + 1) 天")
                         .font(.system(size: 15)).foregroundStyle(Palette.onSurfaceVariant).padding(.leading, 4)
 
                     SectionHeader("旅行成員 · \(members.count) 人")

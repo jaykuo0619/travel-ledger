@@ -77,7 +77,7 @@ struct HomeView: View {
 
 /// Dims a card slightly while it is pressed.
 struct PressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
+    func makeBody(configuration: ButtonStyleConfiguration) -> some View {
         configuration.label.opacity(configuration.isPressed ? 0.75 : 1)
     }
 }
