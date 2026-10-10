@@ -30,6 +30,8 @@ final class AppModel {
     var editing: EditTarget?
     /// A file waiting to be imported (opened from LINE / Files, or picked in 設定).
     var incoming: URL?
+    /// The file the user picked in 設定 for that import; deleted after a successful import if they want that.
+    private var pickedOriginal: URL?
     var toast: String?
 
     init(db: LedgerDatabase, files: FileStore, settings: AppSettings) {
@@ -121,7 +123,9 @@ final class AppModel {
     // MARK: Files coming in
 
     /// A file opened with the app: copy it somewhere we own, then the import screen takes over.
-    func receive(_ url: URL) {
+    /// [picked]: the user chose it in 設定 →「從檔案還原或匯入」 (the only files 匯入後刪除原檔 applies to).
+    func receive(_ url: URL, picked: Bool = false) {
+        pickedOriginal = nil
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("incoming", isDirectory: true)
@@ -133,6 +137,7 @@ final class AppModel {
             // Files opened from other apps land in Documents/Inbox; we keep our own copy only.
             if url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: url) }
             incoming = copy
+            if picked { pickedOriginal = url }
         } catch {
             show("無法開啟這個檔案")
         }
@@ -142,11 +147,15 @@ final class AppModel {
     func finishImport(_ result: TripArchive.Result) {
         if let file = incoming { try? FileManager.default.removeItem(at: file) }
         incoming = nil
+        let original = pickedOriginal
+        pickedOriginal = nil
         switch result {
         case .failed(let message):
             show(message)
         case let .imported(kind, tripIds, updated):
             changed()
+            // Only after the import went through; a cancelled or failed import leaves the file alone.
+            if settings.deleteImportedFile, let original { Self.deleteOriginal(original) }
             let message: String
             switch kind {
             case TripArchive.kindPlans: message = "已併入電腦排的行程"
@@ -162,6 +171,18 @@ final class AppModel {
     func cancelImport() {
         if let file = incoming { try? FileManager.default.removeItem(at: file) }
         incoming = nil
+        pickedOriginal = nil
+    }
+
+    /// Removes a file the user picked in Files (it may live in another app's storage or in iCloud Drive).
+    private static func deleteOriginal(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        var failure: NSError?
+        NSFileCoordinator().coordinate(writingItemAt: url, options: .forDeleting, error: &failure) { target in
+            do { try FileManager.default.removeItem(at: target) } catch { print("delete original failed: \(error)") }
+        }
+        if let failure { print("delete original failed: \(failure)") }
     }
 }
 
@@ -187,6 +208,8 @@ struct AppSettings: Equatable {
     var fontSize = FontScale.standard
     /// Copy "memory" photos to the photo library automatically.
     var saveMemoriesToGallery = true
+    /// Delete the .zip picked in 設定 →「從檔案還原或匯入」 once it has been imported.
+    var deleteImportedFile = true
     /// Shown on trips shared with companions.
     var myName = ""
     /// Epoch day of the last backup (-1: never).
@@ -201,6 +224,7 @@ struct AppSettings: Equatable {
         s.theme = d.string(forKey: "theme_mode").flatMap(ThemeMode.init(rawValue:)) ?? .system
         s.fontSize = d.string(forKey: "font_size").flatMap(FontScale.init(rawValue:)) ?? .standard
         s.saveMemoriesToGallery = d.object(forKey: "save_memories") as? Bool ?? true
+        s.deleteImportedFile = d.object(forKey: "delete_imported_file") as? Bool ?? true
         s.myName = d.string(forKey: "my_name") ?? ""
         s.lastBackupDay = (d.object(forKey: "last_backup_day") as? NSNumber)?.int64Value ?? -1
         s.reminderDismissedDay = (d.object(forKey: "reminder_dismissed_day") as? NSNumber)?.int64Value ?? -1
@@ -212,6 +236,7 @@ struct AppSettings: Equatable {
         d.set(theme.rawValue, forKey: "theme_mode")
         d.set(fontSize.rawValue, forKey: "font_size")
         d.set(saveMemoriesToGallery, forKey: "save_memories")
+        d.set(deleteImportedFile, forKey: "delete_imported_file")
         d.set(myName, forKey: "my_name")
         d.set(NSNumber(value: lastBackupDay), forKey: "last_backup_day")
         d.set(NSNumber(value: reminderDismissedDay), forKey: "reminder_dismissed_day")

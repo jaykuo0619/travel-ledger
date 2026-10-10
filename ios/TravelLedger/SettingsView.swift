@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var picking = false
 
     var body: some View {
+        @Bindable var model = model
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeader("外觀")
@@ -41,6 +42,19 @@ struct SettingsView: View {
                     Divider().overlay(Palette.hairline).padding(.leading, 68)
                     SettingRow(symbol: "arrow.counterclockwise", color: Palette.category(5), title: "從檔案還原或匯入",
                                subtitle: "備份檔,或同伴分享的旅程") { picking = true }
+                    Divider().overlay(Palette.hairline).padding(.leading, 68)
+                    Toggle(isOn: $model.settings.deleteImportedFile) {
+                        HStack(spacing: 14) {
+                            IconTile(symbol: "trash", color: Palette.category(7), size: 40)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("匯入後刪除原檔").appFont(size: 16)
+                                Text("從上面選的檔案,匯入成功後自動刪除;取消或失敗不會刪")
+                                    .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    .tint(Palette.primary)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
                 }
                 .ledgerCard(padding: 0)
 
@@ -89,10 +103,10 @@ struct SettingsView: View {
                     model.showSettings = false
                     Task {
                         try? await Task.sleep(for: .milliseconds(450))
-                        model.receive(url)
+                        model.receive(url, picked: true)
                     }
                 } else {
-                    model.receive(url)
+                    model.receive(url, picked: true)
                 }
             case .failure: model.show("無法開啟這個檔案")
             }
