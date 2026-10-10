@@ -69,6 +69,8 @@ struct RootView: View {
         .sheet(item: $model.editing) { target in
             TripEditView(tripId: target.tripId)
         }
+        .sheet(item: $model.planEditing) { PlanEditView(target: $0) }
+        .sheet(item: $model.dayNoteEditing) { DayNoteSheet(target: $0) }
         .sheet(isPresented: $model.showSettings) {
             NavigationStack {
                 SettingsView()
@@ -108,7 +110,7 @@ struct RootView: View {
             Button("設定") { model.openSettings() }.keyboardShortcut(",", modifiers: .command)
         }
         // Not on top of a sheet that is already open, or of a settings screen that is already showing.
-        .disabled(model.editing != nil || model.showSettings || model.incoming != nil || (!model.wide && !model.path.isEmpty))
+        .disabled(model.sheetOpen || model.incoming != nil || (!model.wide && !model.path.isEmpty))
         .opacity(0)
         .accessibilityHidden(true)
     }

@@ -20,6 +20,7 @@
 		F2CA96C9ADB308148E33D93C /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAB21CFEAD8DA29627A701A4 /* Components.swift */; };
 		B5A9D1C07E3F4A6288C1D2E4 /* BrandSplash.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A9D1C07E3F4A6288C1D2E3 /* BrandSplash.swift */; };
 		B5A9D1C07E3F4A6288C1D2E6 /* Coach.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A9D1C07E3F4A6288C1D2E5 /* Coach.swift */; };
+		B5A9D1C07E3F4A6288C1D2E8 /* PlanEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A9D1C07E3F4A6288C1D2E7 /* PlanEditView.swift */; };
 		F4332DF6C2F3352D846B72FD /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E2CF77F0B92DA49656ACD4 /* Theme.swift */; };
 		F82AA9E84B8F94893FAAA1C8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54101FF59253EFF01F65140E /* SettingsView.swift */; };
 /* End PBXBuildFile section */
@@ -31,6 +32,7 @@
 		5773333C2782021D4B5EB2DA /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		B5A9D1C07E3F4A6288C1D2E3 /* BrandSplash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandSplash.swift; sourceTree = "<group>"; };
 		B5A9D1C07E3F4A6288C1D2E5 /* Coach.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Coach.swift; sourceTree = "<group>"; };
+		B5A9D1C07E3F4A6288C1D2E7 /* PlanEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanEditView.swift; sourceTree = "<group>"; };
 		58E2CF77F0B92DA49656ACD4 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		72564F44E950A8F67BC56788 /* TravelLedger.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TravelLedger.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7811E30E80E6DE826D699803 /* ImportHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportHost.swift; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 				54101FF59253EFF01F65140E /* SettingsView.swift */,
 				B5A9D1C07E3F4A6288C1D2E3 /* BrandSplash.swift */,
 				B5A9D1C07E3F4A6288C1D2E5 /* Coach.swift */,
+				B5A9D1C07E3F4A6288C1D2E7 /* PlanEditView.swift */,
 				58E2CF77F0B92DA49656ACD4 /* Theme.swift */,
 				91EDFA6F2072F264ABBB417C /* TripEditView.swift */,
 				F7DB8436E01F2A1B58DB93FD /* TripView.swift */,
@@ -186,6 +189,7 @@
 				F82AA9E84B8F94893FAAA1C8 /* SettingsView.swift in Sources */,
 				B5A9D1C07E3F4A6288C1D2E4 /* BrandSplash.swift in Sources */,
 				B5A9D1C07E3F4A6288C1D2E6 /* Coach.swift in Sources */,
+				B5A9D1C07E3F4A6288C1D2E8 /* PlanEditView.swift in Sources */,
 				F4332DF6C2F3352D846B72FD /* Theme.swift in Sources */,
 				C6B1A7B7E9F209889F7C33BA /* TripEditView.swift in Sources */,
 				E067AB4660DFABEFB620C012 /* TripView.swift in Sources */,

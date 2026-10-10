@@ -216,6 +216,29 @@ private struct TabBar: View {
     }
 }
 
+/// A small "+ 新增" / "+ 加入" button beside a heading.
+struct SmallAdd: View {
+    let text: String
+    let action: () -> Void
+
+    init(_ text: String, action: @escaping () -> Void) {
+        self.text = text
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Label(text, systemImage: "plus").appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
+                .padding(.horizontal, 12)
+                .frame(minHeight: 36)
+                .background(Palette.primaryContainer, in: Capsule())
+                .foregroundStyle(Palette.primary)
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// In two-column mode there is no tab bar; the tutorial points at the first column's title instead.
 private struct ColumnTitleTarget: ViewModifier {
     let on: Bool
@@ -265,10 +288,13 @@ private struct PlanTab: View {
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
-                Segmented(options: ["依天", "依類型"], selected: byType ? 1 : 0) { byType = $0 == 1 }.coachTarget(.planGrouping)
+                HStack(spacing: 10) {
+                    Segmented(options: ["依天", "依類型"], selected: byType ? 1 : 0) { byType = $0 == 1 }.coachTarget(.planGrouping)
+                    SmallAdd("新增") { model.planEditing = PlanEditTarget(tripId: id) }
+                }
                 if plans.isEmpty, notes.isEmpty {
-                    EmptyState(symbol: "map", title: trip.readOnly ? "對方還沒有安排行程" : "還沒有行程",
-                               message: trip.readOnly ? "等對方排好再分享一次就看得到。" : "匯入電腦排好的行程檔,或同伴分享的旅程,行程就會出現在這裡。")
+                    EmptyState(symbol: "map", title: trip.readOnly ? "對方還沒有安排行程" : "把出發前做的功課放進來",
+                               message: trip.readOnly ? "你想去的地方可以先加進來,會先算「我的補充」。" : "想去的景點、要訂位的餐廳都可以先放進「待排」,之後再排到某一天。")
                 } else {
                     if !needBooking.isEmpty {
                         HStack(spacing: 10) {
@@ -296,7 +322,7 @@ private struct PlanTab: View {
         let looseNote = notes[unscheduledDay]
         if !unscheduled.isEmpty || looseNote != nil {
             SectionHeader("待排 · \(unscheduled.count) 項")
-            if let looseNote { DayNoteCard(text: looseNote).id(looseNote) }
+            if let looseNote { DayNoteCard(text: looseNote, onEdit: noteEditor(unscheduledDay)).id(looseNote) }
             if !unscheduled.isEmpty { PlanCard(rows: unscheduled, trip: trip, showDate: false) }
         }
         ForEach(Array(trip.startDate ... max(trip.startDate, trip.endDate)), id: \.self) { day in
@@ -305,9 +331,17 @@ private struct PlanTab: View {
                 Text("Day \(day - trip.startDate + 1)").appFont(size: 16, weight: .semibold).foregroundStyle(Palette.primary).fixedSize()
                 Text("  \(fmtShortDate(day))").appFont(size: 16, weight: .semibold).lineLimit(1)
                 Spacer(minLength: 0)
+                if !trip.readOnly, notes[day] == nil {
+                    Button { model.dayNoteEditing = DayNoteTarget(tripId: trip.id ?? 0, day: day) } label: {
+                        Image(systemName: "note.text.badge.plus").font(.system(size: 17)).frame(width: 44, height: 36)
+                    }
+                    .foregroundStyle(Palette.onSurfaceVariant)
+                    .accessibilityLabel("加當日筆記")
+                }
+                SmallAdd("加入") { model.planEditing = PlanEditTarget(tripId: trip.id ?? 0, date: day) }
             }
             .padding(.leading, 4).padding(.top, 6)
-            if let n = notes[day] { DayNoteCard(text: n).id(n) }
+            if let n = notes[day] { DayNoteCard(text: n, onEdit: noteEditor(day)).id(n) }
             if rows.isEmpty {
                 Text("還沒有安排").appFont(size: 15).foregroundStyle(Palette.textMuted).padding(.leading, 4)
             } else {
@@ -319,6 +353,11 @@ private struct PlanTab: View {
             SectionHeader("旅程日期以外")
             PlanCard(rows: outside, trip: trip, showDate: true)
         }
+    }
+
+    /// Editing a day's note; nil on someone else's trip (the note is theirs).
+    private func noteEditor(_ day: Int64) -> (() -> Void)? {
+        trip.readOnly ? nil : { model.dayNoteEditing = DayNoteTarget(tripId: trip.id ?? 0, day: day) }
     }
 
     @ViewBuilder
@@ -390,20 +429,32 @@ private struct PlanRowItem: View {
         let style = IconStyle.category(name: p.categoryName, icon: p.categoryIcon, color: p.categoryColor)
         let done = p.status == PlanStatus.done
         let skipped = p.status == PlanStatus.skipped
-        Button { model.path.append(Route.plan(p.id)) } label: {
-            HStack(spacing: 4) {
+        // Official items on someone else's trip can't be ticked; my own additions can.
+        let canTick = !trip.readOnly || p.pending
+        HStack(spacing: 4) {
+            Button {
+                // 已去 ↔ 未去; a skipped one becomes 已去.
+                model.write { try Q.setPlanStatus($0, p.id, done ? PlanStatus.todo : PlanStatus.done) }
+            } label: {
                 ZStack {
                     if done {
                         Circle().fill(Palette.success).frame(width: 26, height: 26)
                             .overlay(Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.white))
-                            .accessibilityLabel("已去")
                     } else if skipped {
-                        Image(systemName: "minus.circle").font(.system(size: 24)).foregroundStyle(Palette.textMuted).accessibilityLabel("跳過")
+                        Image(systemName: "minus.circle").font(.system(size: 24)).foregroundStyle(Palette.textMuted)
                     } else {
                         Circle().strokeBorder(style.color, lineWidth: 2).frame(width: 24, height: 24)
                     }
                 }
                 .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canTick)
+            .accessibilityLabel(done ? "已去" : skipped ? "跳過" : "未去")
+            .accessibilityHint(canTick ? (done ? "點兩下改成未去" : "點兩下標記已去") : "")
+            .sensoryFeedback(.success, trigger: done)
+            Button { model.path.append(Route.plan(p.id)) } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         if let m = p.minuteOfDay {
@@ -422,11 +473,12 @@ private struct PlanRowItem: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
-            .padding(.leading, 8).padding(.trailing, 6).padding(.vertical, 9)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(.leading, 8).padding(.trailing, 6).padding(.vertical, 5)
     }
 
     private func tags(_ p: PlanRow) -> [(String, Color)] {
@@ -461,10 +513,13 @@ struct Tag: View {
 /// A day's note under its heading: one line until tapped, then the whole text with tappable links.
 struct DayNoteCard: View {
     let text: String
+    /// nil: the note can't be edited here.
+    var onEdit: (() -> Void)?
     @State private var open: Bool
 
-    init(text: String) {
+    init(text: String, onEdit: (() -> Void)? = nil) {
         self.text = text
+        self.onEdit = onEdit
         _open = State(initialValue: text.components(separatedBy: "\n").count <= 2)
     }
 
@@ -474,6 +529,14 @@ struct DayNoteCard: View {
                 Image(systemName: "note.text").font(.system(size: 16)).foregroundStyle(Palette.warning)
                 Text(open ? "當日筆記" : "當日筆記 · " + firstLine).appFont(size: 16, weight: .semibold).lineLimit(1)
                 Spacer(minLength: 0)
+                if let onEdit {
+                    Button(action: onEdit) {
+                        Image(systemName: "pencil").font(.system(size: 15, weight: .semibold)).frame(width: 40, height: 32)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Palette.onSurfaceVariant)
+                    .accessibilityLabel("編輯筆記")
+                }
                 Image(systemName: open ? "chevron.up" : "chevron.down").font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Palette.onSurfaceVariant)
                     .accessibilityLabel(open ? "收起" : "展開")

@@ -10,20 +10,12 @@ struct LinkText: View {
 
     var body: some View { Text(Self.attributed(text)).tint(Palette.primary) }
 
+    /// Links found by the same rules as Android (LedgerCore.Links), so both phones agree on what is tappable.
     static func attributed(_ text: String) -> AttributedString {
         var out = AttributedString(text)
-        let types: NSTextCheckingResult.CheckingType = [.link, .phoneNumber]
-        guard let detector = try? NSDataDetector(types: types.rawValue) else { return out }
-        let ns = text as NSString
-        for m in detector.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-            guard let range = Range(m.range, in: text), let r = Range(range, in: out) else { continue }
-            let url: URL?
-            if m.resultType == .phoneNumber, let phone = m.phoneNumber {
-                url = URL(string: "tel:" + phone.filter { $0.isNumber || $0 == "+" })
-            } else {
-                url = m.url
-            }
-            guard let url else { continue }
+        for l in Links.find(text) {
+            guard let range = Range(NSRange(location: l.start, length: l.end - l.start), in: text),
+                  let r = Range(range, in: out), let url = URL(string: l.uri) else { continue }
             out[r].link = url
             out[r].underlineStyle = .single
         }
@@ -56,10 +48,14 @@ struct PlanDetailView: View {
     @Environment(AppModel.self) private var model
     let planId: Int64
     @State private var viewing: Int?
+    @State private var confirmDelete = false
+    @State private var mapTarget: MapTarget?
 
     var body: some View {
         let plan = model.read { try Q.plan($0, planId) } ?? nil
         let trip = plan.flatMap { p in model.read { try Q.trip($0, p.tripId) } ?? nil }
+        // On someone else's trip only my own additions can be changed.
+        let canEdit = plan.map { p in trip?.readOnly == false || p.pending } ?? false
         ScrollView {
             if let p = plan, let t = trip {
                 content(p, t)
@@ -68,6 +64,29 @@ struct PlanDetailView: View {
         .background(Palette.background)
         .navigationTitle("行程")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if canEdit, let p = plan {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { model.planEditing = PlanEditTarget(tripId: p.tripId, planId: planId) } label: { Image(systemName: "pencil") }
+                        .accessibilityLabel("編輯")
+                    Button { confirmDelete = true } label: { Image(systemName: "trash") }
+                        .accessibilityLabel("刪除")
+                }
+            }
+        }
+        .alert("刪除「\(plan?.title ?? "")」?", isPresented: $confirmDelete) {
+            Button("取消", role: .cancel) {}
+            Button("刪除", role: .destructive) {
+                var paths: [String] = []
+                if model.write({ paths = try Q.deletePlanWithPhotos($0, planId) }) {
+                    model.files.delete(paths)
+                    if !model.path.isEmpty { model.path.removeLast() }
+                }
+            }
+        } message: {
+            Text("已記的支出會保留,只是不再連到這個行程。")
+        }
+        .mapLauncher($mapTarget)
         .fullScreenCover(item: Binding(get: { viewing.map(ViewerStart.init) }, set: { viewing = $0?.index })) { start in
             PhotoViewer(paths: (model.read { try Q.planPhotos($0, planId: planId) } ?? []).map { ($0.path, nil) }, start: start.index)
         }
@@ -103,6 +122,12 @@ struct PlanDetailView: View {
             .ledgerCard()
 
             if !lines.isEmpty { DetailCard(lines: lines) }
+
+            if !p.title.isBlank || !p.location.isBlank {
+                PillButton("導航", symbol: "location.fill", height: 48) {
+                    mapTarget = MapTarget(title: p.title, location: p.location, app: t.navApp)
+                }
+            }
 
             if !p.note.isBlank {
                 VStack(alignment: .leading, spacing: 6) {

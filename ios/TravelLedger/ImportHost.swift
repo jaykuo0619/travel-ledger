@@ -26,7 +26,7 @@ struct ImportHost: ViewModifier {
     func body(content: Content) -> some View {
         content
             // Another sheet (trip editor, settings) has to close first; the file waits.
-            .task(id: Waiting(file: model.incoming, blocked: model.editing != nil || model.showSettings)) { await prepare() }
+            .task(id: Waiting(file: model.incoming, blocked: model.sheetOpen)) { await prepare() }
             .sheet(item: $step, onDismiss: { if !busy, model.incoming != nil { model.cancelImport() } }) { s in
                 Group {
                     switch s {
@@ -52,7 +52,7 @@ struct ImportHost: ViewModifier {
     }
 
     private func prepare() async {
-        guard let url = model.incoming, model.editing == nil, !model.showSettings else { return }
+        guard let url = model.incoming, !model.sheetOpen else { return }
         // Give a closing sheet time to leave before the next one is presented.
         try? await Task.sleep(for: .milliseconds(350))
         guard model.incoming == url else { return }

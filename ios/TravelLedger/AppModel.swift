@@ -28,6 +28,11 @@ final class AppModel {
     /// Settings as a sheet (wide layout only; on a phone it is pushed).
     var showSettings = false
     var editing: EditTarget?
+    /// The plan item editor and the day note editor (sheets).
+    var planEditing: PlanEditTarget?
+    var dayNoteEditing: DayNoteTarget?
+    /// Some sheet of ours is up: another one (an import, a shortcut) has to wait.
+    var sheetOpen: Bool { editing != nil || showSettings || planEditing != nil || dayNoteEditing != nil }
     /// A file waiting to be imported (opened from LINE / Files, or picked in 設定).
     var incoming: URL?
     /// The file the user picked in 設定 for that import; deleted after a successful import if they want that.

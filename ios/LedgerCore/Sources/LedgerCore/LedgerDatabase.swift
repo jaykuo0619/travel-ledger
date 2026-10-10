@@ -259,6 +259,34 @@ public enum Q {
         try db.execute(sql: "DELETE FROM plan_item WHERE id = ?", arguments: [id])
     }
 
+    /// Saves a plan item with its pictures as edited: [pictures] is the whole set, saved ones carry their id.
+    /// Returns the item's id and the files of pictures that were removed (to delete from disk).
+    public static func savePlan(_ db: Database, _ plan: PlanItem, pictures: [PlanPhoto]) throws -> (id: Int64, removed: [String]) {
+        var p = plan
+        if p.id == nil { try p.insert(db) } else { try p.update(db) }
+        let id = p.id ?? 0
+        let kept = Set(pictures.compactMap(\.id))
+        let gone = try planPhotos(db, planId: id).filter { !kept.contains($0.id ?? -1) }
+        for g in gone { try db.execute(sql: "DELETE FROM plan_photo WHERE id = ?", arguments: [g.id]) }
+        for var n in pictures where n.id == nil {
+            n.planItemId = id
+            try n.insert(db)
+        }
+        return (id, gone.map(\.path))
+    }
+
+    /// Deletes a plan item and its pictures; returns the picture files to delete from disk.
+    public static func deletePlanWithPhotos(_ db: Database, _ id: Int64) throws -> [String] {
+        let paths = try planPhotos(db, planId: id).map(\.path)
+        try db.execute(sql: "DELETE FROM plan_photo WHERE planItemId = ?", arguments: [id])
+        try deletePlan(db, id)
+        return paths
+    }
+
+    public static func setPlanStatus(_ db: Database, _ id: Int64, _ status: String) throws {
+        try db.execute(sql: "UPDATE plan_item SET status = ? WHERE id = ?", arguments: [status, id])
+    }
+
     public static func planPhotos(_ db: Database, planId: Int64) throws -> [PlanPhoto] {
         try PlanPhoto.fetchAll(db, sql: "SELECT * FROM plan_photo WHERE planItemId = ? ORDER BY id", arguments: [planId])
     }
