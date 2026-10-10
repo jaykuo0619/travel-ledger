@@ -133,6 +133,12 @@ struct PlanDetailView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("筆記", systemImage: "text.alignleft").appFont(size: 16, weight: .semibold)
                     LinkText(text: p.note).appFont(size: 16).textSelection(.enabled)
+                    // Several lines of notes can become separate plan items.
+                    if (!t.readOnly || p.pending), p.note.components(separatedBy: "\n").filter({ !$0.isBlank }).count >= 2 {
+                        Button { model.splitting = SplitTarget(planId: planId) } label: {
+                            Label("把筆記拆成多個行程", systemImage: "arrow.triangle.branch").appFont(size: 15, weight: .semibold).frame(minHeight: 44)
+                        }
+                    }
                 }
                 .ledgerCard(padding: 14)
             }

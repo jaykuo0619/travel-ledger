@@ -38,12 +38,18 @@ final class AppModel {
     /// Some sheet of ours is up: another one (an import, a shortcut) has to wait.
     var sheetOpen: Bool {
         editing != nil || showSettings || planEditing != nil || dayNoteEditing != nil || expenseEditing != nil || sharing != nil
+            || pasting != nil || splitting != nil
     }
     /// A file waiting to be imported (opened from LINE / Files, or picked in 設定).
     var incoming: URL?
     /// The file the user picked in 設定 for that import; deleted after a successful import if they want that.
     private var pickedOriginal: URL?
     var toast: String?
+    /// A button on the current toast (復原), and what it does.
+    var toastAction: (label: String, run: () -> Void)?
+    /// Pasting several places, and splitting a note into plan items (sheets).
+    var pasting: PasteTarget?
+    var splitting: SplitTarget?
 
     init(db: LedgerDatabase, files: FileStore, settings: AppSettings) {
         self.db = db
@@ -70,7 +76,16 @@ final class AppModel {
 
     func changed() { revision += 1 }
 
-    func show(_ message: String) { withAnimation { toast = message } }
+    func show(_ message: String) {
+        toastAction = nil
+        withAnimation { toast = message }
+    }
+
+    /// A message with a button; it stays about ten seconds.
+    func show(_ message: String, action: String, _ run: @escaping () -> Void) {
+        toastAction = (action, run)
+        withAnimation { toast = message }
+    }
 
     /// Reads from the database; nil if something went wrong.
     func read<T>(_ block: (Database) throws -> T) -> T? {

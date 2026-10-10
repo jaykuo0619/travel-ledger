@@ -513,3 +513,183 @@ struct DayNoteSheet: View {
         }
     }
 }
+
+// MARK: - 貼上多筆、拆筆記
+
+/// Pasting several places into a trip's 待排.
+struct PasteTarget: Identifiable, Hashable {
+    let tripId: Int64
+    var id: Int64 { tripId }
+}
+
+/// Splitting one plan item's note into plan items.
+struct SplitTarget: Identifiable, Hashable {
+    let planId: Int64
+    var id: Int64 { planId }
+}
+
+/// 「貼上多筆」: one place per line goes to 待排, with the time and a guessed category.
+struct PasteSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let target: PasteTarget
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let count = PlanParser.splitNote(text).count
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("一行一個地點,會加到「待排」,並自動猜分類。").appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
+                TextEditor(text: $text)
+                    .appFont(size: 16)
+                    .focused($focused)
+                    .scrollContentBackground(.hidden)
+                    .padding(10)
+                    .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.medium, style: .continuous).strokeBorder(Palette.hairline))
+                    .frame(minHeight: 160)
+                HStack(spacing: 10) {
+                    Button {
+                        if let s = UIPasteboard.general.string { text = text.isEmpty ? s : text + "\n" + s }
+                    } label: {
+                        Label("貼上", systemImage: "doc.on.clipboard").appFont(size: 15, weight: .semibold).frame(minHeight: 44)
+                    }
+                    Spacer(minLength: 0)
+                    if count > 0 { Text("會加入 \(count) 項").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant) }
+                }
+            }
+            .padding(16)
+            .background(Palette.background)
+            .navigationTitle("貼上多筆")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("加入待排") { add() }.disabled(count == 0) }
+            }
+        }
+        .tint(Palette.primary)
+        .presentationDetents([.large])
+        .onAppear { focused = true }
+    }
+
+    private func add() {
+        let parsed = PlanParser.splitNote(text)
+        let shared = (model.read { try Q.trip($0, target.tripId) } ?? nil)?.readOnly == true
+        let categories = model.read { try Q.categories($0) } ?? []
+        let ok = model.write { db in
+            for p in parsed {
+                let cat = p.categoryHint.flatMap { hint in categories.first { $0.name == hint }?.id }
+                _ = try Q.savePlan(db, PlanItem(tripId: target.tripId, title: p.title, categoryId: cat, minuteOfDay: p.minuteOfDay,
+                                                location: p.location, pending: shared), pictures: [])
+            }
+        }
+        if ok {
+            model.show("已加入 \(parsed.count) 項到待排")
+            dismiss()
+        }
+    }
+}
+
+/// 「把筆記拆成多個行程」: every line is listed (nothing is silently dropped) with the guessed time and category;
+/// untick lines that are not places, tap a category to change it.
+struct SplitNoteSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let target: SplitTarget
+    @State private var source: PlanItem?
+    @State private var parsed: [ParsedPlace] = []
+    @State private var chosen: [Bool] = []
+    @State private var cats: [Int64?] = []
+
+    var body: some View {
+        let categories = model.read { try Q.categories($0) } ?? []
+        let where_ = source?.date.map { " \(fmtShortDate($0)) " } ?? "「待排」"
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("每一行一個行程,排在\(where_)。不是地點的行取消勾選;分類猜錯點一下改。")
+                        .appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
+                    VStack(spacing: 0) {
+                        ForEach(parsed.indices, id: \.self) { i in
+                            if i > 0 { Divider().overlay(Palette.hairline).padding(.leading, 52) }
+                            row(i, categories)
+                        }
+                    }
+                    .ledgerCard(padding: 0)
+                    if let s = source {
+                        Text(s.pending ? "原本的「\(s.title)」會保留。" : "原本的「\(s.title)」整段筆記會移到\(where_)的「當日筆記」,方便對照;拆完也可以按「復原」。")
+                            .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                    }
+                }
+                .padding(16)
+            }
+            .background(Palette.background)
+            .navigationTitle("拆成 \(chosen.filter { $0 }.count) 個行程")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("建立") { create() }.disabled(!chosen.contains(true)) }
+            }
+        }
+        .tint(Palette.primary)
+        .onAppear(perform: load)
+    }
+
+    private func row(_ i: Int, _ categories: [LedgerCore.Category]) -> some View {
+        let item = parsed[i]
+        let cat = categories.first { $0.id == cats[i] }
+        return HStack(spacing: 4) {
+            Button { chosen[i].toggle() } label: {
+                Image(systemName: chosen[i] ? "checkmark.square.fill" : "square").font(.system(size: 22))
+                    .foregroundStyle(chosen[i] ? Palette.primary : Palette.textMuted)
+                    .frame(width: 48, height: 48)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(item.title)
+            .accessibilityAddTraits(chosen[i] ? .isSelected : [])
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title).appFont(size: 16).foregroundStyle(Palette.onBackground)
+                HStack(spacing: 8) {
+                    if let m = item.minuteOfDay { Text(fmtTime(m)).appFont(size: 13, weight: .semibold).foregroundStyle(Palette.primary).tnum() }
+                    Menu {
+                        ForEach(categories) { c in Button(c.name) { cats[i] = c.id } }
+                        Button("未分類") { cats[i] = nil }
+                    } label: {
+                        Text((cat?.name ?? "未分類") + " ▾").appFont(size: 13, weight: .semibold)
+                            .foregroundStyle(cat == nil ? Palette.warning : Palette.onSurfaceVariant)
+                            .frame(minHeight: 32)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.trailing, 12).padding(.vertical, 4)
+    }
+
+    private func load() {
+        guard source == nil, let p = model.read({ try Q.plan($0, target.planId) }) ?? nil else { return }
+        source = p
+        parsed = PlanParser.splitNote(p.note)
+        chosen = Array(repeating: true, count: parsed.count)
+        let categories = model.read { try Q.categories($0) } ?? []
+        cats = parsed.map { place in place.categoryHint.flatMap { hint in categories.first { $0.name == hint }?.id } }
+    }
+
+    private func create() {
+        guard let s = source else { return }
+        let items = parsed.indices.filter { chosen[$0] }.map { i in
+            PlanItem(tripId: s.tripId, title: parsed[i].title, categoryId: cats[i], date: s.date, minuteOfDay: parsed[i].minuteOfDay,
+                     location: parsed[i].location, pending: s.pending)
+        }
+        // On someone else's trip, or for my own pending item, the original stays.
+        let shared = (model.read { try Q.trip($0, s.tripId) } ?? nil)?.readOnly == true || s.pending
+        var undo: SplitUndo?
+        guard model.write({ undo = try Q.splitPlan($0, original: s, items: items, shared: shared) }), let undo else { return }
+        dismiss()
+        if !shared, !model.path.isEmpty { model.path.removeLast() } // the item this screen was showing is gone
+        model.show("已拆成 \(items.count) 個行程" + (shared ? "" : ",原筆記放在當日筆記"), action: "復原") {
+            model.write { try Q.undoSplit($0, undo) }
+        }
+    }
+}

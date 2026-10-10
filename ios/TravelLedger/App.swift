@@ -73,6 +73,8 @@ struct RootView: View {
         .sheet(item: $model.dayNoteEditing) { DayNoteSheet(target: $0) }
         .sheet(item: $model.expenseEditing) { ExpenseEditView(target: $0) }
         .sheet(item: $model.sharing) { ShareView(target: $0) }
+        .sheet(item: $model.pasting) { PasteSheet(target: $0) }
+        .sheet(item: $model.splitting) { SplitNoteSheet(target: $0) }
         .sheet(isPresented: $model.showSettings) {
             NavigationStack {
                 SettingsView()
@@ -124,10 +126,19 @@ struct ToastView: View {
 
     var body: some View {
         if let text = model.toast {
-            Text(text)
-                .appFont(size: 15)
+            HStack(spacing: 12) {
+                Text(text).appFont(size: 15).multilineTextAlignment(.center)
+                if let action = model.toastAction {
+                    Button(action.label) {
+                        action.run()
+                        withAnimation { model.toast = nil }
+                    }
+                    .appFont(size: 15, weight: .bold)
+                    .frame(minWidth: 44, minHeight: 36)
+                    .underline()
+                }
+            }
                 .foregroundStyle(Palette.background)
-                .multilineTextAlignment(.center)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
                 // Dark on a light screen, light on a dark one, so it always stands out.
@@ -137,10 +148,10 @@ struct ToastView: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
                 .id(text)
                 .task(id: text) {
-                    try? await Task.sleep(for: .seconds(text.count > 16 ? 3.5 : 2.2))
+                    try? await Task.sleep(for: .seconds(model.toastAction != nil ? 10 : text.count > 16 ? 3.5 : 2.2))
                     withAnimation { if model.toast == text { model.toast = nil } }
                 }
-                .allowsHitTesting(false)
+                .allowsHitTesting(model.toastAction != nil)
         }
     }
 }

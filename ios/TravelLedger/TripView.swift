@@ -336,6 +336,11 @@ private struct PlanTab: View {
             LazyVStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     Segmented(options: ["依天", "依類型"], selected: byType ? 1 : 0) { byType = $0 == 1 }.coachTarget(.planGrouping)
+                    Button { model.pasting = PasteTarget(tripId: id) } label: {
+                        Image(systemName: "doc.on.clipboard").font(.system(size: 17)).frame(width: 44, height: 44)
+                    }
+                    .foregroundStyle(Palette.primary)
+                    .accessibilityLabel("貼上多筆")
                     SmallAdd("新增") { model.planEditing = PlanEditTarget(tripId: id) }
                 }
                 if plans.isEmpty, notes.isEmpty {
