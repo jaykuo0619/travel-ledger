@@ -60,6 +60,13 @@ struct ExpenseEditView: View {
     @State private var copyFiles: [String] = []
     /// Writing 「拉麵 1200」 by hand instead of typing.
     @State private var handwriting = false
+    /// Circling an amount or items on a receipt.
+    @State private var marking: ReceiptToMark?
+    /// Drawing on a memory photo: plain, or with an instant-photo frame to sign.
+    @State private var askFrame: Int?
+    @State private var framed = false
+    /// Photos changed by drawing that should also go to the photo library when the expense is saved.
+    @State private var resave: Set<String> = []
 
     enum Field { case title, note }
 
@@ -148,9 +155,18 @@ struct ExpenseEditView: View {
             PhotoViewer(paths: photos.map { ($0.path, $0.type) }, start: start.index)
         }
         .fullScreenCover(item: Binding(get: { drawingOn.map(ViewerStart.init) }, set: { drawingOn = $0?.index })) { start in
-            DrawingSheet(title: "在照片上畫記", background: photos.indices.contains(start.index) ? model.storedImage(photos[start.index].path) : nil) { data in
+            let stored = photos.indices.contains(start.index) ? model.storedImage(photos[start.index].path) : nil
+            DrawingSheet(title: framed ? "簽名、寫日期" : "在照片上畫記", background: framed ? stored.map(instantPhotoFrame) : stored) { data in
                 replacePhoto(start.index, with: data)
             }
+        }
+        .fullScreenCover(item: $marking) { r in
+            ReceiptMarkSheet(receipt: r) { amount = fmtNumber($0) }
+        }
+        .confirmationDialog("在這張照片上", isPresented: Binding(get: { askFrame != nil }, set: { if !$0 { askFrame = nil } }), presenting: askFrame) { i in
+            Button("直接畫記") { framed = false; drawingOn = i }
+            Button("加白邊,簽名或寫日期") { framed = true; drawingOn = i }
+            Button("取消", role: .cancel) {}
         }
         .fullScreenCover(isPresented: $handwriting) {
             DrawingSheet(title: "手寫記帳:寫下名稱和金額", background: nil, pageSize: CGSize(width: 1600, height: 900), saveText: "辨識") { data in
@@ -318,7 +334,10 @@ struct ExpenseEditView: View {
                         }
                         .overlay(alignment: .bottomTrailing) {
                             // Circle an amount, mark whose item it is…
-                            Button { drawingOn = i } label: {
+                            Button {
+                                // A memory can also get an instant-photo frame to sign; a receipt is just drawn on.
+                                if photos[i].type == PhotoType.memory { askFrame = i } else { framed = false; drawingOn = i }
+                            } label: {
                                 Image(systemName: "pencil.tip.crop.circle.fill").font(.system(size: 24))
                                     .symbolRenderingMode(.palette).foregroundStyle(.white, Palette.primary)
                                     .frame(width: 40, height: 40, alignment: .bottomTrailing).padding(4)
@@ -342,6 +361,12 @@ struct ExpenseEditView: View {
             }
             if processing || full {
                 Text(processing ? "處理照片中…" : "已滿 \(maxExpensePhotos) 張").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+            }
+            if let i = photos.firstIndex(where: { $0.type == PhotoType.receipt }) {
+                Button { Task { await markReceipt(i) } } label: {
+                    Label("在收據上圈金額、加總品項", systemImage: "scribble.variable").appFont(size: 15, weight: .semibold).frame(minHeight: 40)
+                }
+                .disabled(processing)
             }
         }
     }
@@ -482,6 +507,21 @@ struct ExpenseEditView: View {
         if type == PhotoType.receipt, read.guess.hasData { receipt = read.guess }
     }
 
+    /// Reads the receipt again (its lines and where they are) and opens it for marking.
+    private func markReceipt(_ i: Int) async {
+        guard photos.indices.contains(i), let image = model.storedImage(photos[i].path),
+              let data = try? Data(contentsOf: model.files.url(photos[i].path)) else { return }
+        processing = true
+        defer { processing = false }
+        let hint = currency
+        let lines = await Task.detached(priority: .userInitiated) { recognizeText(data, currency: hint) }.value
+        if lines.isEmpty {
+            model.show("這張照片讀不到文字")
+            return
+        }
+        marking = ReceiptToMark(image: image, lines: lines, currency: currency)
+    }
+
     /// An expense holds three photos at most, so the drawn-on copy takes the photo's place.
     private func replacePhoto(_ i: Int, with data: Data) {
         guard photos.indices.contains(i) else { return }
@@ -494,6 +534,7 @@ struct ExpenseEditView: View {
         if photos[i].id == nil { model.files.delete(old) } else { replacedFiles.append(old) } // a saved one goes on save
         copyFiles.append(path)
         let size = UIImage(data: data)?.size ?? .zero
+        if photos[i].type == PhotoType.memory { resave.insert(path) } // the signed / drawn-on memory goes to the library too
         photos[i].path = path
         photos[i].width = Int(size.width)
         photos[i].height = Int(size.height)
@@ -537,7 +578,7 @@ struct ExpenseEditView: View {
         let toLibrary = model.settings.saveMemoriesToGallery
         var toSave = photos
         var libraryFiles: [URL] = []
-        for i in toSave.indices where toSave[i].id == nil && toSave[i].type == PhotoType.memory && toLibrary {
+        for i in toSave.indices where toSave[i].type == PhotoType.memory && toLibrary && (toSave[i].id == nil || resave.contains(toSave[i].path)) {
             toSave[i].savedToGallery = true
             libraryFiles.append(model.files.url(toSave[i].path))
         }

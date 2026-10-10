@@ -287,6 +287,135 @@ private struct TabBar: View {
     }
 }
 
+/// A day's route to draw: the stops are listed down the left edge of the page as a guide.
+struct RouteCanvas: Identifiable {
+    let day: Int64
+    let firstPlan: Int64
+    let stops: [String]
+    var id: Int64 { day }
+
+    @MainActor static func page(_ stops: [String]) -> UIImage? {
+        let view = VStack(alignment: .leading, spacing: 18) {
+            ForEach(Array(stops.prefix(12).enumerated()), id: \.offset) { i, s in
+                HStack(spacing: 10) {
+                    Text(verbatim: "\(i + 1)").font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 34, height: 34).background(Color(red: 0.36, green: 0.34, blue: 0.95), in: Circle())
+                    Text(s).font(.system(size: 20, weight: .medium)).foregroundStyle(Color(white: 0.25)).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(28)
+        .frame(width: 600, height: 800, alignment: .topLeading)
+        .background(Color.white)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        return renderer.uiImage
+    }
+}
+
+/// 時間軸: one day's plans laid out by their start time; drag one up or down to change when it starts (in steps of
+/// 15 minutes). There is no end time in the data, so every block has the same height.
+private struct PlanTimeline: View {
+    @Environment(AppModel.self) private var model
+    let trip: Trip
+    let plans: [PlanRow]
+    @State private var day: Int64?
+    @State private var dragging: (id: Int64, offset: CGFloat)?
+    private let hour: CGFloat = 56
+    private let first = 6 // the axis starts at 06:00
+
+    var body: some View {
+        let days = Array(trip.startDate ... max(trip.startDate, trip.endDate))
+        let current = day ?? days.first { d in plans.contains { $0.date == d } } ?? days[0]
+        let todays = plans.filter { $0.date == current }
+        let untimed = todays.filter { $0.minuteOfDay == nil }
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(days, id: \.self) { d in
+                        SelectPill("Day \(d - trip.startDate + 1) \(fmtMonthDay(d))", selected: d == current) { day = d }
+                    }
+                }
+                .padding(.vertical, 1)
+            }
+            if !untimed.isEmpty {
+                Text("還沒有時間(點一下設定)").appFont(size: 13, weight: .medium).foregroundStyle(Palette.onSurfaceVariant)
+                FlowLayout(spacing: 8, lineSpacing: 8) {
+                    ForEach(untimed) { p in
+                        Button { model.planEditing = PlanEditTarget(tripId: trip.id ?? 0, planId: p.id) } label: {
+                            Text(p.title).appFont(size: 15).lineLimit(1)
+                                .padding(.horizontal, 12).frame(minHeight: 40)
+                                .background(Palette.card, in: Capsule())
+                                .overlay(Capsule().strokeBorder(Palette.hairline))
+                                .foregroundStyle(Palette.onBackground)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            ZStack(alignment: .topLeading) {
+                VStack(spacing: 0) {
+                    ForEach(first ..< 24, id: \.self) { h in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text(String(format: "%02d:00", h)).appFont(size: 13).tnum().foregroundStyle(Palette.textMuted).frame(width: 48, alignment: .trailing)
+                            Rectangle().fill(Palette.hairline).frame(height: 1).padding(.top, 8)
+                        }
+                        .frame(height: hour, alignment: .top)
+                    }
+                }
+                ForEach(todays.filter { $0.minuteOfDay != nil }) { p in block(p) }
+            }
+            if todays.isEmpty {
+                Text("這一天還沒有安排").appFont(size: 15).foregroundStyle(Palette.textMuted)
+            }
+        }
+    }
+
+    private func y(_ minute: Int) -> CGFloat { CGFloat(max(minute - first * 60, 0)) / 60 * hour + 8 }
+
+    private func block(_ p: PlanRow) -> some View {
+        let minute = p.minuteOfDay ?? 0
+        let style = IconStyle.category(name: p.categoryName, icon: p.categoryIcon, color: p.categoryColor)
+        let canMove = !trip.readOnly || p.pending
+        let moved = dragging?.id == p.id ? dragging?.offset ?? 0 : 0
+        let shown = snapped(minute, moved)
+        return HStack(spacing: 8) {
+            Image(systemName: style.symbol).font(.system(size: 14)).foregroundStyle(style.color)
+            Text(fmtTime(shown)).appFont(size: 15, weight: .semibold).tnum().foregroundStyle(Palette.primary)
+            Text(p.title).appFont(size: 15, weight: .medium).lineLimit(1).foregroundStyle(Palette.onBackground)
+            Spacer(minLength: 0)
+            if canMove { Image(systemName: "line.3.horizontal").font(.system(size: 14)).foregroundStyle(Palette.textMuted) }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 44)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(dragging?.id == p.id ? Palette.primary : Palette.hairline, lineWidth: dragging?.id == p.id ? 2 : 1))
+        .padding(.leading, 60)
+        .offset(y: y(minute) + moved - 14)
+        .zIndex(dragging?.id == p.id ? 1 : 0)
+        .gesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { v in if canMove { dragging = (p.id, v.translation.height) } }
+                .onEnded { v in
+                    dragging = nil
+                    guard canMove else { return }
+                    let to = snapped(minute, v.translation.height)
+                    if to != minute { model.write { try Q.setPlanTime($0, p.id, to) } }
+                }
+        )
+        .onTapGesture { model.openDetail(Route.plan(p.id)) }
+        .accessibilityLabel("\(fmtTime(minute)) \(p.title)")
+        .accessibilityHint(canMove ? "上下拖曳改變開始時間" : "")
+    }
+
+    /// The start time a drag of [offset] points gives, in steps of 15 minutes within the day.
+    private func snapped(_ minute: Int, _ offset: CGFloat) -> Int {
+        let raw = Double(minute) + Double(offset / hour) * 60
+        return min(max(Int((raw / 15).rounded()) * 15, first * 60), 23 * 60 + 45)
+    }
+}
+
 /// What travels while a plan item is dragged.
 private let planDragPrefix = "kaliupa-plan:"
 
@@ -544,6 +673,9 @@ private struct PlanTab: View {
     @Environment(AppModel.self) private var model
     let trip: Trip
     @AppStorage("plan_by_type") private var byType = false
+    @AppStorage("plan_timeline") private var timeline = false
+    /// Drawing the day's route (kept as a picture of that day's first plan item).
+    @State private var routeFor: RouteCanvas?
 
     var body: some View {
         let id = trip.id ?? 0
@@ -554,7 +686,11 @@ private struct PlanTab: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
-                    Segmented(options: ["依天", "依類型"], selected: byType ? 1 : 0) { byType = $0 == 1 }.coachTarget(.planGrouping)
+                    Segmented(options: ["依天", "依類型", "時間軸"], selected: timeline ? 2 : byType ? 1 : 0) {
+                        timeline = $0 == 2
+                        if $0 < 2 { byType = $0 == 1 }
+                    }
+                    .coachTarget(.planGrouping)
                     Button { model.pasting = PasteTarget(tripId: id) } label: {
                         Image(systemName: "doc.on.clipboard").font(.system(size: 17)).frame(width: 44, height: 44)
                     }
@@ -576,13 +712,29 @@ private struct PlanTab: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Palette.danger.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
                     }
-                    if byType { byTypeList(plans) } else { byDayList(plans, notes: notes) }
+                    if timeline { PlanTimeline(trip: trip, plans: plans) } else if byType { byTypeList(plans) } else { byDayList(plans, notes: notes) }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
             .padding(.bottom, 40)
             .readableWidth()
+        }
+        .fullScreenCover(item: $routeFor) { r in
+            DrawingSheet(title: "畫 \(fmtShortDate(r.day)) 的路線", background: RouteCanvas.page(r.stops)) { data in
+                guard let path = try? model.files.write(data, folder: "photos/plans") else { return }
+                let size = UIImage(data: data)?.size ?? .zero
+                // The format has no picture per day, so the route is kept with the day's first plan item.
+                let ok = model.write { db in
+                    guard try Q.planPhotos(db, planId: r.firstPlan).count < maxPlanPictures else { throw CocoaError(.fileWriteNoPermission) }
+                    var photo = PlanPhoto(planItemId: r.firstPlan, path: path, width: Int(size.width), height: Int(size.height))
+                    try photo.insert(db)
+                }
+                if ok { model.show("路線圖存在這天第一個行程的圖片裡") } else {
+                    model.files.delete(path)
+                    model.show("這個行程的圖片已滿 \(maxPlanPictures) 張")
+                }
+            }
         }
     }
 
@@ -611,6 +763,13 @@ private struct PlanTab: View {
                     }
                     .foregroundStyle(Palette.onSurfaceVariant)
                     .accessibilityLabel("加當日筆記")
+                }
+                if !rows.isEmpty, !trip.readOnly || rows[0].pending {
+                    Button { routeFor = RouteCanvas(day: day, firstPlan: rows[0].id, stops: rows.map(\.title)) } label: {
+                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath").font(.system(size: 17)).frame(width: 44, height: 36)
+                    }
+                    .foregroundStyle(Palette.onSurfaceVariant)
+                    .accessibilityLabel("畫這天的路線")
                 }
                 SmallAdd("加入") { model.planEditing = PlanEditTarget(tripId: trip.id ?? 0, date: day) }
             }
@@ -772,6 +931,18 @@ private struct PlanRowItem: View {
         .padding(.leading, 8).padding(.trailing, 6).padding(.vertical, 5)
         // Hold and drag to another day or to 待排 (what may be changed: my own trip's items, or my additions).
         .modifier(PlanDrag(id: p.id, title: p.title, enabled: canTick))
+        // A quick stroke across the row (Pencil or finger): to the right ticks it, to the left moves it a day later.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 40).onEnded { v in
+                guard canTick, abs(v.translation.width) > 90, abs(v.translation.height) < 28 else { return }
+                if v.translation.width > 0 {
+                    model.write { try Q.setPlanStatus($0, p.id, done ? PlanStatus.todo : PlanStatus.done) }
+                } else if let d = p.date {
+                    model.write { try Q.setPlanDate($0, p.id, d + 1) }
+                    model.show("已移到隔天", action: "復原") { model.write { try Q.setPlanDate($0, p.id, d) } }
+                }
+            }
+        )
         // The same move without dragging: hold the row and pick a day.
         .contextMenu {
             if canTick {

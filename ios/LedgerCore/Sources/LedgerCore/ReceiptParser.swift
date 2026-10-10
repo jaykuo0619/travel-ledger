@@ -202,6 +202,17 @@ public enum ReceiptParser {
         return (keyword && priceLines >= 2) || priceLines >= 4
     }
 
+    /// A line that prices one thing bought: it has an amount and is not a total, tax, cash or change line.
+    public static func isItemLine(_ text: String) -> Bool {
+        guard !amountsIn(text).isEmpty, labelRank(text) == nil else { return false }
+        return !excludedLabels.contains { normalize(text).uppercased().contains($0.uppercased()) }
+    }
+
+    /// A total, tax, cash or change label (its amount may be printed in a separate box on the same row).
+    public static func isSummaryLabel(_ text: String) -> Bool {
+        labelRank(text) != nil || excludedLabels.contains { normalize(text).uppercased().contains($0.uppercased()) }
+    }
+
     /// [force]: the photo was taken with 「拍收據」, so read it as a receipt even if the layout is hard to read.
     public static func parse(_ lines: [OcrLine], force: Bool = false) -> ReceiptGuess {
         if !isReceipt(lines), !force { return ReceiptGuess(isReceipt: false) }
@@ -229,3 +240,53 @@ public func parseHandwritten(_ text: String) -> (title: String, amount: Double?)
     title = title.replacingOccurrences(of: "NT", with: " ").components(separatedBy: .whitespaces).filter { !$0.isEmpty }.joined(separator: " ")
     return (title.trimmingCharacters(in: CharacterSet(charactersIn: " :,-")), amount)
 }
+
+/// A rectangle in image pixels (the area a pen stroke covers).
+public struct MarkBox: Equatable, Sendable {
+    public let left: Double, top: Double, right: Double, bottom: Double
+    public init(left: Double, top: Double, right: Double, bottom: Double) {
+        self.left = left; self.top = top; self.right = right; self.bottom = bottom
+    }
+}
+
+/// What pen marks on a receipt picked out.
+public struct MarkedAmounts: Equatable, Sendable {
+    /// The amounts on the lines the pen touched, top to bottom.
+    public var marked: [Double]
+    /// The amounts of the other item lines (totals, tax, cash and change are left out).
+    public var rest: [Double]
+    public init(marked: [Double], rest: [Double]) {
+        self.marked = marked
+        self.rest = rest
+    }
+
+    public var markedTotal: Double { marked.reduce(0, +) }
+    public var restTotal: Double { rest.reduce(0, +) }
+}
+
+/// Which amounts were circled or struck through: a line counts as touched when a mark overlaps at least a third of
+/// its height. An amount printed in its own box on the same row as a touched name counts too.
+public func markedAmounts(_ lines: [OcrLine], marks: [MarkBox]) -> MarkedAmounts {
+    func touched(_ l: OcrLine) -> Bool {
+        marks.contains { m in
+            let overlapY = min(Double(l.bottom), m.bottom) - max(Double(l.top), m.top)
+            let overlapX = min(Double(l.right), m.right) - max(Double(l.left), m.left)
+            return overlapX > 0 && overlapY >= Double(max(l.height, 1)) / 3
+        }
+    }
+    let ordered = lines.sorted { $0.top != $1.top ? $0.top < $1.top : $0.left < $1.left }
+    let hit = ordered.filter(touched)
+    func sameRow(_ a: OcrLine, _ b: OcrLine) -> Bool { abs(a.centerY - b.centerY) <= max(a.height, b.height) / 2 }
+    var marked: [Double] = [], rest: [Double] = []
+    for l in ordered {
+        guard let amount = ReceiptParser.amountsIn(l.text).last else { continue }
+        if hit.contains(where: { $0 == l || sameRow($0, l) }) {
+            marked.append(amount)
+        } else if ReceiptParser.isItemLine(l.text), !ordered.contains(where: { $0 != l && sameRow($0, l) && ReceiptParser.isSummaryLabel($0.text) }) {
+            // Not an amount that belongs to a 合計 / お預り label printed in the box beside it.
+            rest.append(amount)
+        }
+    }
+    return MarkedAmounts(marked: marked, rest: rest)
+}
+

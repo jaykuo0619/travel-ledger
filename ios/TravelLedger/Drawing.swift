@@ -44,7 +44,7 @@ struct DrawingSheet: View {
 }
 
 /// The picture (or white paper) with a transparent PencilKit canvas exactly over it, and the tool picker.
-private struct AnnotateCanvas: UIViewRepresentable {
+struct AnnotateCanvas: UIViewRepresentable {
     let canvas: PKCanvasView
     let background: UIImage?
     let pageSize: CGSize
@@ -139,4 +139,102 @@ struct DrawTarget: Identifiable, Hashable {
 extension AppModel {
     /// A stored picture at full size, to draw on.
     func storedImage(_ path: String) -> UIImage? { UIImage(contentsOfFile: files.url(path).path) }
+}
+
+// MARK: - Marking a receipt
+
+/// A receipt with the text that was read from it, ready to be marked.
+struct ReceiptToMark: Identifiable {
+    let id = UUID()
+    let image: UIImage
+    let lines: [OcrLine]
+    let currency: String
+}
+
+/// Circle an amount to use it, or circle / strike through several items to add them up: the lines the pen touches
+/// are added together, and so are the remaining items, and either sum can go into 記一筆. Nothing is stored.
+struct ReceiptMarkSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let receipt: ReceiptToMark
+    let onUse: (Double) -> Void
+    @State private var canvas = PKCanvasView()
+    @State private var picked = MarkedAmounts(marked: [], rest: [])
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                AnnotateCanvas(canvas: canvas, background: receipt.image, pageSize: receipt.image.size) { recount() }
+                    .background(Palette.surfaceVariant)
+                VStack(alignment: .leading, spacing: 8) {
+                    if picked.marked.isEmpty {
+                        Text("圈出一個金額就用那個金額;圈起或劃過幾個品項,會把它們加起來。").appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) { choices }
+                            VStack(spacing: 10) { choices }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 96) // room for the tool picker
+                // A fixed height: the picture must not move under the strokes when the buttons appear.
+                .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 220, alignment: .topLeading)
+                .background(Palette.card)
+            }
+            .navigationTitle("在收據上圈選")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { canvas.undoManager?.undo() } label: { Image(systemName: "arrow.uturn.backward") }
+                        .accessibilityLabel("復原一筆")
+                        .disabled(canvas.drawing.strokes.isEmpty)
+                }
+            }
+        }
+        .tint(Palette.primary)
+    }
+
+    @ViewBuilder private var choices: some View {
+        PillButton("用畫到的 \(fmtAmount(picked.markedTotal, receipt.currency))", height: 48) {
+            onUse(picked.markedTotal)
+            dismiss()
+        }
+        if picked.restTotal > 0 {
+            Button {
+                onUse(picked.restTotal)
+                dismiss()
+            } label: {
+                Text("用其餘的 \(fmtAmount(picked.restTotal, receipt.currency))").appFont(size: 16, weight: .semibold).lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Palette.secondaryContainer, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// Which printed lines the strokes cover, in the picture's own pixels.
+    private func recount() {
+        guard canvas.bounds.width > 0 else { return }
+        let scale = Double(receipt.image.size.width * receipt.image.scale / canvas.bounds.width)
+        let marks = canvas.drawing.strokes.map { s -> MarkBox in
+            let b = s.renderBounds
+            return MarkBox(left: Double(b.minX) * scale, top: Double(b.minY) * scale, right: Double(b.maxX) * scale, bottom: Double(b.maxY) * scale)
+        }
+        picked = markedAmounts(receipt.lines, marks: marks)
+    }
+}
+
+/// A photo with a white frame, wider at the bottom, to write a date or a few words on — like an instant photo.
+func instantPhotoFrame(_ image: UIImage) -> UIImage {
+    let w = image.size.width * image.scale, h = image.size.height * image.scale
+    let side = (w * 0.05).rounded(), bottom = (w * 0.22).rounded()
+    let size = CGSize(width: w + side * 2, height: h + side + bottom)
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1
+    format.opaque = true
+    return UIGraphicsImageRenderer(size: size, format: format).image { context in
+        UIColor.white.setFill()
+        context.fill(CGRect(origin: .zero, size: size))
+        image.draw(in: CGRect(x: side, y: side, width: w, height: h))
+    }
 }

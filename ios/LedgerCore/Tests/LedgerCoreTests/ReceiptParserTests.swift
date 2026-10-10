@@ -88,4 +88,19 @@ final class ReceiptParserTests: XCTestCase {
         r = parseHandwritten("伴手禮")
         XCTAssertEqual("伴手禮", r.title); XCTAssertNil(r.amount)
     }
+
+    func testMarkedAmounts() {
+        // Rows are 40 px apart from y = 80; amounts sit in their own boxes at x 500…700.
+        let lines = receipt("一蘭", "ラーメン | ¥980", "替玉 | ¥210", "半熟卵 | ¥140", "合計 | ¥1,330", "お預り | ¥2,000")
+        // A circle around the 替玉 amount only.
+        var m = markedAmounts(lines, marks: [MarkBox(left: 480, top: 118, right: 720, bottom: 152)])
+        XCTAssertEqual([210], m.marked)
+        XCTAssertEqual([980, 140], m.rest) // the total and the cash line are not items
+        // A line through the names of the first two items.
+        m = markedAmounts(lines, marks: [MarkBox(left: 30, top: 90, right: 200, bottom: 100), MarkBox(left: 30, top: 130, right: 200, bottom: 140)])
+        XCTAssertEqual([980, 210], m.marked)
+        XCTAssertEqual(1190, m.markedTotal)
+        XCTAssertEqual([140], m.rest)
+        XCTAssertEqual([], markedAmounts(lines, marks: []).marked)
+    }
 }

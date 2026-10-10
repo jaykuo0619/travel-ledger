@@ -132,7 +132,7 @@ struct ShareView: View {
         case .additions:
             let n = (model.read { try Q.pendingCount($0, trip?.id ?? 0) }) ?? 0
             let y = trip?.sharedBy ?? ""
-            return "把你在「\(x)」補充的 \(n) 項做成一個檔案,傳給\(y)(例如 LINE)。\(y)確認加入後再分享一次,大家的就會統一。"
+            return "把你在「\(x)」補充的 \(n) 項做成一個檔案,傳給\(y)(例如 LINE)。\(y)確認加入後再分享一次,大家的就會統一。你在補充的行程上畫的手寫便條會一起傳。"
         case .backup:
             return "把所有旅程做成一個備份檔。換手機或手機遺失時,在新手機的 設定 →「從檔案還原或匯入」打開它就能還原。"
         }

@@ -288,6 +288,11 @@ public enum Q {
         try db.execute(sql: "UPDATE plan_item SET date = ? WHERE id = ?", arguments: [date, id])
     }
 
+    /// Changes when a plan item starts (nil = no time); the format has no end time.
+    public static func setPlanTime(_ db: Database, _ id: Int64, _ minuteOfDay: Int?) throws {
+        try db.execute(sql: "UPDATE plan_item SET minuteOfDay = ? WHERE id = ?", arguments: [minuteOfDay, id])
+    }
+
     public static func setPlanStatus(_ db: Database, _ id: Int64, _ status: String) throws {
         try db.execute(sql: "UPDATE plan_item SET status = ? WHERE id = ?", arguments: [status, id])
     }
