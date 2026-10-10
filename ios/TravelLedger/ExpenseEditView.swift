@@ -58,6 +58,8 @@ struct ExpenseEditView: View {
     /// Files to remove once the expense is saved (replaced by a drawn-on copy) or if it is not saved (the copies).
     @State private var replacedFiles: [String] = []
     @State private var copyFiles: [String] = []
+    /// Writing 「拉麵 1200」 by hand instead of typing.
+    @State private var handwriting = false
 
     enum Field { case title, note }
 
@@ -150,6 +152,11 @@ struct ExpenseEditView: View {
                 replacePhoto(start.index, with: data)
             }
         }
+        .fullScreenCover(isPresented: $handwriting) {
+            DrawingSheet(title: "手寫記帳:寫下名稱和金額", background: nil, pageSize: CGSize(width: 1600, height: 900), saveText: "辨識") { data in
+                Task { await readHandwriting(data) }
+            }
+        }
         .alert("1 \(currency) = ? 新台幣", isPresented: $editingRate) {
             TextField("匯率", text: $rateDraft).keyboardType(.decimalPad)
             Button("取消", role: .cancel) {}
@@ -239,6 +246,23 @@ struct ExpenseEditView: View {
         }
     }
 
+    /// Reads what was written by hand (on the device) and fills in the name and the amount; both stay editable.
+    private func readHandwriting(_ data: Data) async {
+        processing = true
+        defer { processing = false }
+        let hint = currency
+        let lines = await Task.detached(priority: .userInitiated) { recognizeText(data, currency: hint) }.value
+        let text = lines.sorted { $0.top < $1.top }.map(\.text).joined(separator: "\n")
+        let read = parseHandwritten(text)
+        if read.title.isEmpty, read.amount == nil {
+            model.show("看不出寫了什麼,再寫大一點試試")
+            return
+        }
+        if !read.title.isEmpty { title = read.title }
+        if let a = read.amount { amount = fmtNumber(a) }
+        model.show(read.amount == nil ? "讀到名稱「\(read.title)」,金額請用鍵盤補上" : "讀到:\(read.title.isEmpty ? "" : read.title + " ")\(fmtNumber(read.amount ?? 0))")
+    }
+
     @ViewBuilder private var noteField: some View {
         if noteOpen {
             FieldBox("備註") {
@@ -247,11 +271,16 @@ struct ExpenseEditView: View {
                     .focused($focus, equals: .note)
             }
         } else {
-            Button {
-                noteOpen = true
-                focus = .note
-            } label: {
-                Label("加備註", systemImage: "square.and.pencil").appFont(size: 15, weight: .semibold).frame(minHeight: 40)
+            HStack(spacing: 18) {
+                Button {
+                    noteOpen = true
+                    focus = .note
+                } label: {
+                    Label("加備註", systemImage: "square.and.pencil").appFont(size: 15, weight: .semibold).frame(minHeight: 40)
+                }
+                Button { handwriting = true } label: {
+                    Label("手寫", systemImage: "pencil.and.scribble").appFont(size: 15, weight: .semibold).frame(minHeight: 40)
+                }
             }
         }
     }

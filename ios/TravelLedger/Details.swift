@@ -81,7 +81,7 @@ struct PlanDetailView: View {
                 var paths: [String] = []
                 if model.write({ paths = try Q.deletePlanWithPhotos($0, planId) }) {
                     model.files.delete(paths)
-                    if !model.path.isEmpty { model.path.removeLast() }
+                    model.closeDetail()
                 }
             }
         } message: {

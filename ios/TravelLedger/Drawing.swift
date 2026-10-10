@@ -10,13 +10,16 @@ struct DrawingSheet: View {
     let title: String
     /// The picture to draw on; nil = a blank page.
     let background: UIImage?
+    /// The blank page's size in pixels (portrait 3:4 unless said otherwise).
+    var pageSize = CGSize(width: 1200, height: 1600)
+    var saveText = "儲存"
     let onSave: (Data) -> Void
     @State private var canvas = PKCanvasView()
     @State private var empty = true
 
     var body: some View {
         NavigationStack {
-            AnnotateCanvas(canvas: canvas, background: background) { empty = canvas.drawing.strokes.isEmpty }
+            AnnotateCanvas(canvas: canvas, background: background, pageSize: pageSize) { empty = canvas.drawing.strokes.isEmpty }
                 .background(Palette.surfaceVariant)
                 .ignoresSafeArea(edges: .bottom)
                 .navigationTitle(title)
@@ -27,8 +30,8 @@ struct DrawingSheet: View {
                         Button { canvas.undoManager?.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                             .accessibilityLabel("復原一筆")
                             .disabled(empty)
-                        Button("儲存") {
-                            if let data = AnnotateCanvas.render(canvas: canvas, background: background) { onSave(data) }
+                        Button(saveText) {
+                            if let data = AnnotateCanvas.render(canvas: canvas, background: background, pageSize: pageSize) { onSave(data) }
                             dismiss()
                         }
                         .disabled(empty)
@@ -44,15 +47,13 @@ struct DrawingSheet: View {
 private struct AnnotateCanvas: UIViewRepresentable {
     let canvas: PKCanvasView
     let background: UIImage?
+    let pageSize: CGSize
     let onChange: () -> Void
-
-    /// A blank page: portrait, 3:4.
-    static let pageSize = CGSize(width: 1200, height: 1600)
 
     func makeCoordinator() -> Coordinator { Coordinator(onChange) }
 
     func makeUIView(context: Context) -> Holder {
-        let holder = Holder(canvas: canvas, background: background)
+        let holder = Holder(canvas: canvas, background: background, pageSize: pageSize)
         canvas.delegate = context.coordinator
         canvas.drawingPolicy = .anyInput // a finger draws too (iPhone, or no Pencil at hand)
         canvas.backgroundColor = .clear
@@ -80,9 +81,9 @@ private struct AnnotateCanvas: UIViewRepresentable {
         let imageView = UIImageView()
         let aspect: CGFloat
 
-        init(canvas: PKCanvasView, background: UIImage?) {
+        init(canvas: PKCanvasView, background: UIImage?, pageSize: CGSize) {
             self.canvas = canvas
-            let size = background?.size ?? AnnotateCanvas.pageSize
+            let size = background?.size ?? pageSize
             aspect = size.height > 0 ? size.width / size.height : 0.75
             super.init(frame: .zero)
             imageView.image = background
@@ -109,7 +110,7 @@ private struct AnnotateCanvas: UIViewRepresentable {
     }
 
     /// The picture with the ink on it, as a JPEG at most 1600 px on its long edge.
-    static func render(canvas: PKCanvasView, background: UIImage?) -> Data? {
+    static func render(canvas: PKCanvasView, background: UIImage?, pageSize: CGSize) -> Data? {
         guard canvas.bounds.width > 0 else { return nil }
         var size = background.map { CGSize(width: $0.size.width * $0.scale, height: $0.size.height * $0.scale) } ?? pageSize
         let long = max(size.width, size.height)

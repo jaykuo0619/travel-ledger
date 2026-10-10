@@ -210,3 +210,22 @@ public enum ReceiptParser {
                             date: findDate(all), minuteOfDay: findTime(all))
     }
 }
+
+/// What a handwritten line like 「拉麵 1200」 or 「350 咖啡」 says: the amount is the last money-looking number,
+/// the name is whatever is left.
+public func parseHandwritten(_ text: String) -> (title: String, amount: Double?) {
+    let flat = ReceiptParser.normalize(text).components(separatedBy: .newlines).joined(separator: " ")
+    guard let amount = ReceiptParser.amountsIn(flat).last else {
+        return (flat.trimmingCharacters(in: .whitespacesAndNewlines), nil)
+    }
+    // Drop the number that was read as the amount (with any thousands separators and currency marks around it).
+    let digits = fmtNumber(amount)
+    var title = flat
+    let pattern = "[¥$₩]?\\s*" + digits.map { ch in ch == "." ? "\\." : "\(ch),?" }.joined() + "\\s*(?:元|円|원|塊)?"
+    if let re = try? NSRegularExpression(pattern: pattern),
+       let m = re.matches(in: flat, range: NSRange(location: 0, length: (flat as NSString).length)).last {
+        title = (flat as NSString).replacingCharacters(in: m.range, with: " ")
+    }
+    title = title.replacingOccurrences(of: "NT", with: " ").components(separatedBy: .whitespaces).filter { !$0.isEmpty }.joined(separator: " ")
+    return (title.trimmingCharacters(in: CharacterSet(charactersIn: " :,-")), amount)
+}

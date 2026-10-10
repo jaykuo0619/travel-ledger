@@ -687,7 +687,7 @@ struct SplitNoteSheet: View {
         var undo: SplitUndo?
         guard model.write({ undo = try Q.splitPlan($0, original: s, items: items, shared: shared) }), let undo else { return }
         dismiss()
-        if !shared, !model.path.isEmpty { model.path.removeLast() } // the item this screen was showing is gone
+        if !shared { model.closeDetail() } // the item this screen was showing is gone
         model.show("已拆成 \(items.count) 個行程" + (shared ? "" : ",原筆記放在當日筆記"), action: "復原") {
             model.write { try Q.undoSplit($0, undo) }
         }

@@ -219,7 +219,7 @@ struct ShareView: View {
 }
 
 /// The system share sheet (LINE, AirDrop, Mail, 儲存到檔案…).
-private struct ActivityView: UIViewControllerRepresentable {
+struct ActivityView: UIViewControllerRepresentable {
     let items: [Any]
     let subject: String
     let onDone: (Bool) -> Void

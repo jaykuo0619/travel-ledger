@@ -75,4 +75,17 @@ final class ReceiptParserTests: XCTestCase {
         XCTAssertFalse(ReceiptParser.parse(receipt("一蘭", "ICHIRAN")).isReceipt)
         XCTAssertTrue(ReceiptParser.parse(receipt("一蘭", "ICHIRAN"), force: true).isReceipt) // 拍收據
     }
+
+    func testHandwritten() {
+        var r = parseHandwritten("拉麵 1200")
+        XCTAssertEqual("拉麵", r.title); XCTAssertEqual(1200, r.amount)
+        r = parseHandwritten("350 咖啡")
+        XCTAssertEqual("咖啡", r.title); XCTAssertEqual(350, r.amount)
+        r = parseHandwritten("晚餐\n1,280 元")
+        XCTAssertEqual("晚餐", r.title); XCTAssertEqual(1280, r.amount)
+        r = parseHandwritten("taxi 12.5")
+        XCTAssertEqual("taxi", r.title); XCTAssertEqual(12.5, r.amount)
+        r = parseHandwritten("伴手禮")
+        XCTAssertEqual("伴手禮", r.title); XCTAssertNil(r.amount)
+    }
 }

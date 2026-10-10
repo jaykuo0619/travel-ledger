@@ -25,6 +25,8 @@ final class AppModel {
     /// True on an iPad at full width: trips sit in a sidebar and the open trip is [selectedTrip].
     var wide = false
     var selectedTrip: Int64?
+    /// The plan item or expense shown in the side panel beside the trip (wide layout only).
+    var detail: Route?
     /// Settings as a sheet (wide layout only; on a phone it is pushed).
     var showSettings = false
     var editing: EditTarget?
@@ -38,7 +40,7 @@ final class AppModel {
     /// Some sheet of ours is up: another one (an import, a shortcut) has to wait.
     var sheetOpen: Bool {
         editing != nil || showSettings || planEditing != nil || dayNoteEditing != nil || expenseEditing != nil || sharing != nil
-            || pasting != nil || splitting != nil
+            || pasting != nil || splitting != nil || journaling != nil
     }
     /// A file waiting to be imported (opened from LINE / Files, or picked in 設定).
     var incoming: URL?
@@ -48,6 +50,8 @@ final class AppModel {
     /// A button on the current toast (復原), and what it does.
     var toastAction: (label: String, run: () -> Void)?
     /// Pasting several places, and splitting a note into plan items (sheets).
+    /// The day-by-day journal page of a trip (a sheet).
+    var journaling: JournalTarget?
     var pasting: PasteTarget?
     var splitting: SplitTarget?
 
@@ -147,13 +151,25 @@ final class AppModel {
 
     /// Opens a trip: beside the sidebar on an iPad, pushed on a phone.
     func openTrip(_ id: Int64) {
+        detail = nil
         selectedTrip = id
         path = NavigationPath()
         if !wide { path.append(Route.trip(id)) }
     }
 
     /// Back to all trips (the list on a phone, the overview on an iPad).
+    /// A plan item or an expense: in the side panel on an iPad (the lists stay visible), pushed on a phone.
+    func openDetail(_ route: Route) {
+        if wide { detail = route } else { path.append(route) }
+    }
+
+    /// Leaves the plan item / expense that is showing.
+    func closeDetail() {
+        if wide { detail = nil } else if !path.isEmpty { path.removeLast() }
+    }
+
     func closeTrip() {
+        detail = nil
         selectedTrip = nil
         path = NavigationPath()
     }
@@ -166,6 +182,7 @@ final class AppModel {
     func layoutChanged(wide: Bool) {
         guard wide != self.wide else { return }
         self.wide = wide
+        detail = nil
         showSettings = false
         path = NavigationPath()
         if !wide, let id = selectedTrip { path.append(Route.trip(id)) }

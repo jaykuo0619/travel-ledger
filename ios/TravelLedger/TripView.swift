@@ -1,16 +1,24 @@
 import LedgerCore
 import SwiftUI
 
-/// The tabs of a trip: plans, the ledger and statistics (今天 is not built yet), with 記一筆 in the middle.
+/// The tabs of a trip: today, plans, the ledger and statistics, with 記一筆 in the middle.
 enum ShownTab: String, CaseIterable {
-    case plan = "行程", ledger = "帳本", stats = "統計"
+    case today = "今天", plan = "行程", ledger = "帳本", stats = "統計"
 
-    var symbol: String { self == .plan ? "map" : self == .ledger ? "list.bullet.rectangle.portrait" : "chart.pie" }
+    var symbol: String {
+        switch self {
+        case .today: return "sun.max"
+        case .plan: return "map"
+        case .ledger: return "list.bullet.rectangle.portrait"
+        case .stats: return "chart.pie"
+        }
+    }
 
-    /// Before or during the trip: plans; after it: the statistics.
+    /// Before the trip: plans; during it: today; after it: the statistics.
     static func `default`(_ trip: Trip, today: Int64) -> ShownTab {
         switch TripTab.default(start: trip.startDate, end: trip.endDate, today: today) {
-        case .plan, .today: return .plan
+        case .plan: return .plan
+        case .today: return .today
         case .ledger: return .ledger
         case .stats: return .stats
         }
@@ -22,6 +30,8 @@ struct TripView: View {
     @Environment(AppModel.self) private var model
     let tripId: Int64
     @State private var tab: ShownTab?
+    /// Which of 今天 / 行程 the left column shows in two-column mode.
+    @State private var leftTab: ShownTab?
     @State private var confirmDelete = false
     @AppStorage(CoachTour.home.rawValue) private var homeTourDone = false
 
@@ -40,7 +50,19 @@ struct TripView: View {
                     }
                     if columns {
                         HStack(spacing: 0) {
-                            column(ShownTab.plan) { PlanTab(trip: trip) }
+                            // The left column is today or the plans.
+                            let left = current == .plan ? ShownTab.plan : current == .today ? ShownTab.today : (leftTab ?? ShownTab.default(trip, today: today) == .today ? ShownTab.today : ShownTab.plan)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Segmented(options: [ShownTab.today.rawValue, ShownTab.plan.rawValue], selected: left == .today ? 0 : 1) {
+                                    leftTab = $0 == 0 ? .today : .plan
+                                    if current == .today || current == .plan { tab = leftTab }
+                                }
+                                .frame(maxWidth: 240)
+                                .padding(.horizontal, 16).padding(.bottom, 2)
+                                .modifier(ColumnTitleTarget(on: true))
+                                if left == .today { TodayTab(trip: trip, today: today) { tab = $0 } } else { PlanTab(trip: trip) }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                                 .frame(width: (geo.size.width * 0.54).rounded())
                             Divider().overlay(Palette.hairline)
                             // The right column is the ledger or the statistics; 記一筆 sits in its heading.
@@ -63,6 +85,7 @@ struct TripView: View {
                     } else {
                         Group {
                             switch current {
+                            case .today: TodayTab(trip: trip, today: today) { tab = $0 }
                             case .plan: PlanTab(trip: trip)
                             case .ledger: LedgerTab(trip: trip, today: today)
                             case .stats: StatsTab(trip: trip)
@@ -159,6 +182,7 @@ struct TripView: View {
                 if !trip.readOnly {
                     Button { model.sharing = .desktop(tripId) } label: { Label("傳到電腦排行程", systemImage: "desktopcomputer") }
                 }
+                Button { model.journaling = JournalTarget(tripId: tripId) } label: { Label("旅行手帳", systemImage: "book.pages") }
                 Button { model.closeTrip() } label: { Label("所有旅程", systemImage: "suitcase.rolling") }
                 Button(role: .destructive) { confirmDelete = true } label: { Label("刪除旅程", systemImage: "trash") }
             } label: {
@@ -225,6 +249,7 @@ private struct TabBar: View {
         VStack(spacing: 0) {
             Divider().overlay(Palette.hairline)
             HStack(spacing: 0) {
+                item(.today)
                 item(.plan)
                 // 記一筆: the big button in the middle.
                 Button(action: onAdd) {
@@ -249,9 +274,9 @@ private struct TabBar: View {
         return Button { onSelect(t) } label: {
             VStack(spacing: 2) {
                 Image(systemName: t.symbol).font(.system(size: 18))
-                    .padding(.horizontal, 16).padding(.vertical, 3)
+                    .padding(.horizontal, 12).padding(.vertical, 3)
                     .background(on ? Palette.primaryContainer : .clear, in: Capsule())
-                Text(t.rawValue).appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
+                Text(t.rawValue).appFont(size: 13, weight: .semibold).lineLimit(1).fixedSize()
             }
             .foregroundStyle(on ? Palette.primary : Palette.onSurfaceVariant)
             .frame(maxWidth: .infinity, minHeight: 60)
@@ -337,6 +362,153 @@ private struct ColumnTitleTarget: ViewModifier {
     let on: Bool
     func body(content: Content) -> some View {
         if on { content.coachTarget(.tripTabs) } else { content }
+    }
+}
+
+// MARK: - Today
+
+/// 今天 (ui/PlanScreens.kt TodayTab): what matters right now — before the trip the countdown and what still needs
+/// booking, during it today's plans and spending, after it what was left undone.
+private struct TodayTab: View {
+    @Environment(AppModel.self) private var model
+    let trip: Trip
+    let today: Int64
+    let switchTo: (ShownTab) -> Void
+    @State private var mapTarget: MapTarget?
+
+    var body: some View {
+        let id = trip.id ?? 0
+        let plans = model.read { try Q.planRows($0, id) } ?? []
+        let expenses = model.read { try Q.expenseRows($0, id) } ?? []
+        let note = (model.read { try Q.dayNote($0, tripId: id, day: today) } ?? nil)?.text
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                if let note {
+                    DayNoteCard(text: note, onEdit: trip.readOnly ? nil : { model.dayNoteEditing = DayNoteTarget(tripId: id, day: today) }, startOpen: true).id(note)
+                }
+                if today < trip.startDate {
+                    before(plans, expenses)
+                } else if today <= trip.endDate {
+                    during(plans, expenses)
+                } else {
+                    after(plans)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 40)
+            .readableWidth()
+        }
+        .mapLauncher($mapTarget)
+    }
+
+    private func openMap(_ p: PlanRow) { mapTarget = MapTarget(title: p.title, location: p.location, app: trip.navApp) }
+
+    @ViewBuilder private func during(_ plans: [PlanRow], _ expenses: [ExpenseRow]) -> some View {
+        let todays = plans.filter { $0.date == today }
+        let spent = expenses.filter { $0.date == today }
+        let done = todays.filter { $0.status == PlanStatus.done }.count
+        VStack(alignment: .leading, spacing: 4) {
+            Text(verbatim: "第 \(today - trip.startDate + 1) 天 · \(fmtShortDate(today))").appFont(size: 17, weight: .bold)
+            HStack(alignment: .lastTextBaseline) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("今天已花").appFont(size: 13, weight: .medium).foregroundStyle(Palette.onSurfaceVariant)
+                    Text(fmtMoney(spent.reduce(0) { $0 + $1.homeAmount })).appFont(size: 24, weight: .bold).foregroundStyle(Palette.primary).tnum()
+                }
+                Spacer(minLength: 8)
+                if !todays.isEmpty { Text(verbatim: "\(done) / \(todays.count) 完成").appFont(size: 15, weight: .semibold).foregroundStyle(Palette.success) }
+            }
+        }
+        .foregroundStyle(Palette.onBackground)
+        .ledgerCard(padding: 16)
+
+        SectionHeader("今天的行程") { SmallAdd("新增") { model.planEditing = PlanEditTarget(tripId: trip.id ?? 0, date: today) } }
+        if todays.isEmpty {
+            Text("還沒有安排").appFont(size: 15).foregroundStyle(Palette.textMuted).padding(.leading, 4)
+        } else {
+            PlanCard(rows: todays, trip: trip, showDate: false, onMap: openMap)
+        }
+
+        // From the first day to yesterday, still not visited.
+        let missed = plans.filter { p in p.status == PlanStatus.todo && (p.date.map { $0 >= trip.startDate && $0 < today } ?? false) }
+        if !missed.isEmpty {
+            SectionHeader("之前沒去的 · \(missed.count) 項") {
+                if !trip.readOnly {
+                    Button("全部移到今天") {
+                        model.write { db in for p in missed { try Q.setPlanDate(db, p.id, today) } }
+                    }
+                    .appFont(size: 15, weight: .semibold).frame(minHeight: 44)
+                }
+            }
+            PlanCard(rows: missed, trip: trip, showDate: true, onMap: openMap)
+        }
+
+        if !spent.isEmpty {
+            SectionHeader("今天的支出")
+            VStack(spacing: 0) {
+                ForEach(spent) { e in
+                    if e.id != spent.first?.id { Divider().overlay(Palette.hairline).padding(.leading, 66) }
+                    ExpenseRowItem(row: e, tripReadOnly: trip.readOnly, tripId: trip.id)
+                }
+            }
+            .ledgerCard(padding: 0)
+        }
+    }
+
+    @ViewBuilder private func before(_ plans: [PlanRow], _ expenses: [ExpenseRow]) -> some View {
+        let scheduled = plans.filter { $0.date != nil }.count
+        VStack(alignment: .leading, spacing: 4) {
+            Text(tripStatus(start: trip.startDate, end: trip.endDate, today: today)).appFont(size: 21, weight: .bold)
+            Text(verbatim: "\(fmtShortDate(trip.startDate)) – \(fmtShortDate(trip.endDate))").appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
+            Text(verbatim: "目前已付 \(fmtMoney(expenses.reduce(0) { $0 + $1.homeAmount }))").appFont(size: 16, weight: .semibold).foregroundStyle(Palette.primary).tnum()
+                .padding(.top, 6)
+        }
+        .foregroundStyle(Palette.onBackground)
+        .ledgerCard(padding: 16)
+
+        Button { switchTo(.plan) } label: {
+            HStack(spacing: 12) {
+                IconTile(symbol: "map", color: Palette.primary, size: 40)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("行程準備").appFont(size: 16, weight: .semibold)
+                    Text(verbatim: "已排 \(scheduled) 項 · 待排 \(plans.count - scheduled) 項").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.textMuted)
+            }
+            .foregroundStyle(Palette.onBackground)
+            .ledgerCard(padding: 14)
+        }
+        .buttonStyle(.plain)
+
+        let toBook = plans.filter { $0.reservation == Reservation.needed && $0.status == PlanStatus.todo }
+        if !toBook.isEmpty {
+            SectionHeader("還沒訂位 · \(toBook.count) 項")
+            PlanCard(rows: toBook, trip: trip, showDate: true)
+        }
+    }
+
+    @ViewBuilder private func after(_ plans: [PlanRow]) -> some View {
+        Button { switchTo(.stats) } label: {
+            HStack(spacing: 12) {
+                IconTile(symbol: "flag.checkered", color: Palette.success, size: 40)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("旅程已結束").appFont(size: 16, weight: .semibold)
+                    Text("看看這趟花了多少").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.textMuted)
+            }
+            .foregroundStyle(Palette.onBackground)
+            .ledgerCard(padding: 14)
+        }
+        .buttonStyle(.plain)
+
+        let left = plans.filter { $0.status != PlanStatus.done }
+        if !left.isEmpty {
+            SectionHeader("沒去成的 · \(left.count) 項(下次的口袋名單)")
+            PlanCard(rows: left, trip: trip, showDate: true, onMap: openMap)
+        }
     }
 }
 
@@ -511,12 +683,14 @@ private struct PlanCard: View {
     let rows: [PlanRow]
     let trip: Trip
     let showDate: Bool
+    /// 今天: each row also has 導航 and 記一筆.
+    var onMap: ((PlanRow) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(rows) { p in
                 if p.id != rows.first?.id { Divider().overlay(Palette.hairline).padding(.leading, 60) }
-                PlanRowItem(plan: p, trip: trip, showDate: showDate)
+                PlanRowItem(plan: p, trip: trip, showDate: showDate, onMap: onMap)
             }
         }
         .ledgerCard(padding: 0)
@@ -529,6 +703,7 @@ private struct PlanRowItem: View {
     let plan: PlanRow
     let trip: Trip
     let showDate: Bool
+    var onMap: ((PlanRow) -> Void)?
 
     var body: some View {
         let p = plan
@@ -560,7 +735,7 @@ private struct PlanRowItem: View {
             .accessibilityLabel(done ? "已去" : skipped ? "跳過" : "未去")
             .accessibilityHint(canTick ? (done ? "點兩下改成未去" : "點兩下標記已去") : "")
             .sensoryFeedback(.success, trigger: done)
-            Button { model.path.append(Route.plan(p.id)) } label: {
+            Button { model.openDetail(Route.plan(p.id)) } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         if let m = p.minuteOfDay {
@@ -583,6 +758,16 @@ private struct PlanRowItem: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            if let onMap {
+                Button { onMap(p) } label: { Image(systemName: "location.fill").font(.system(size: 16)).frame(width: 40, height: 44) }
+                    .foregroundStyle(Palette.primary)
+                    .accessibilityLabel("導航到 \(p.title)")
+                Button { model.expenseEditing = ExpenseEditTarget(tripId: trip.id ?? 0, planId: p.id) } label: {
+                    Image(systemName: "plus.circle").font(.system(size: 18)).frame(width: 40, height: 44)
+                }
+                .foregroundStyle(Palette.primary)
+                .accessibilityLabel("為 \(p.title) 記一筆")
+            }
         }
         .padding(.leading, 8).padding(.trailing, 6).padding(.vertical, 5)
         // Hold and drag to another day or to 待排 (what may be changed: my own trip's items, or my additions).
@@ -641,10 +826,11 @@ struct DayNoteCard: View {
     var onEdit: (() -> Void)?
     @State private var open: Bool
 
-    init(text: String, onEdit: (() -> Void)? = nil) {
+    /// [startOpen]: 今天 always shows its note in full.
+    init(text: String, onEdit: (() -> Void)? = nil, startOpen: Bool = false) {
         self.text = text
         self.onEdit = onEdit
-        _open = State(initialValue: text.components(separatedBy: "\n").count <= 2)
+        _open = State(initialValue: startOpen || text.components(separatedBy: "\n").count <= 2)
     }
 
     var body: some View {
@@ -888,7 +1074,7 @@ struct ExpenseRowItem: View {
             if let owner, !tripReadOnly || e.pending {
                 model.expenseEditing = ExpenseEditTarget(tripId: owner, expenseId: e.id)
             } else {
-                model.path.append(Route.expense(e.id))
+                model.openDetail(Route.expense(e.id))
             }
         } label: {
             HStack(spacing: 12) {

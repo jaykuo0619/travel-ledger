@@ -50,6 +50,18 @@ struct RootView: View {
                         }
                         .navigationDestination(for: Route.self) { destination($0) }
                     }
+                    // A plan item or an expense opens beside the lists instead of covering them.
+                    .inspector(isPresented: Binding(get: { model.detail != nil }, set: { if !$0 { model.detail = nil } })) {
+                        NavigationStack {
+                            Group { if let route = model.detail { destination(route).id(route) } }
+                                .toolbar {
+                                    ToolbarItem(placement: .cancellationAction) {
+                                        Button { model.detail = nil } label: { Image(systemName: "xmark") }.accessibilityLabel("關閉")
+                                    }
+                                }
+                        }
+                        .inspectorColumnWidth(min: 340, ideal: 400, max: 460)
+                    }
                 }
                 .background(Palette.background)
                 .coachTour(.home, steps: HomeView.tourSteps(hasTrips: model.read { try Q.tripSummaries($0) }?.isEmpty == false),
@@ -74,6 +86,7 @@ struct RootView: View {
         .sheet(item: $model.expenseEditing) { ExpenseEditView(target: $0) }
         .sheet(item: $model.sharing) { ShareView(target: $0) }
         .sheet(item: $model.pasting) { PasteSheet(target: $0) }
+        .sheet(item: $model.journaling) { JournalView(target: $0) }
         .sheet(item: $model.splitting) { SplitNoteSheet(target: $0) }
         .sheet(isPresented: $model.showSettings) {
             NavigationStack {

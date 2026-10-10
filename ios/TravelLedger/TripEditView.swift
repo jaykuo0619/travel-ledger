@@ -27,6 +27,7 @@ struct TripEditView: View {
     @State private var addingCurrency = false
     @State private var photoItem: PhotosPickerItem?
     @State private var coverBusy = false
+    @State private var drawingCover = false
 
     struct RateDraft: Identifiable, Equatable {
         let currency: String
@@ -50,6 +51,10 @@ struct TripEditView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     coverBox.coachTarget(.editCover)
+                    Button { drawingCover = true } label: {
+                        Label(cover == nil ? "自己畫封面" : "重畫封面", systemImage: "pencil.and.scribble").appFont(size: 15, weight: .semibold)
+                            .frame(minHeight: 40)
+                    }
                     if cover == nil {
                         CoverThemePicker(name: name, start: start, selected: theme) { theme = $0 }
                     } else {
@@ -155,6 +160,17 @@ struct TripEditView: View {
         .interactiveDismissDisabled()
         .onAppear(perform: load)
         .onAppear { model.refreshReferenceRates() }
+        .fullScreenCover(isPresented: $drawingCover) {
+            // A wide page, like the cover itself.
+            DrawingSheet(title: "畫封面", background: nil, pageSize: CGSize(width: 1600, height: 900)) { data in
+                guard let path = try? model.files.write(data, folder: "covers") else {
+                    model.show("儲存失敗")
+                    return
+                }
+                if cover != initial?.coverPath { model.files.delete(cover) } // an unsaved earlier pick
+                cover = path
+            }
+        }
         .sheet(item: $picking) { field in
             if field == .start {
                 DayPickerSheet(title: "出發日期", initial: start) { d in
