@@ -63,6 +63,10 @@ struct TripEditView: View {
                         TextField("", text: $name, prompt: Text("例如:東京美食之旅").foregroundStyle(Palette.textMuted), axis: .vertical)
                             .lineLimit(1 ... 2)
                             .appFont(size: 16)
+                            // Two lines for a long name, but it is one line of text: Return doesn't add a newline.
+                            .onChange(of: name) { _, v in
+                                if v.contains(where: \.isNewline) { name = v.filter { !$0.isNewline } }
+                            }
                     }
                     .coachTarget(.editName)
 
@@ -136,8 +140,17 @@ struct TripEditView: View {
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityLabel("儲存")
                 }
+                // The number pads have no Return key.
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                }
             }
         }
+        // Messages (a photo that can't be read, a failed save) show over this sheet, not behind it.
+        .overlay(alignment: .bottom) { ToastView() }
         .interactiveDismissDisabled()
         .onAppear(perform: load)
         .sheet(item: $picking) { field in
@@ -164,6 +177,7 @@ struct TripEditView: View {
                 if !n.isEmpty, !members.contains(n) { members.append(n) }
                 newMember = ""
             }
+            .disabled(newMember.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
@@ -235,9 +249,9 @@ struct TripEditView: View {
                                 Text(m).appFont(size: 16).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                                 Button { members.removeAll { $0 == m } } label: {
                                     Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.textMuted)
-                                        .frame(width: 36, height: 40)
+                                        .frame(width: 44, height: 44)
                                 }
-                                .accessibilityLabel("移除")
+                                .accessibilityLabel("移除 \(m)")
                             }
                             .padding(.leading, 10)
                             .frame(maxWidth: .infinity, minHeight: 52)
@@ -272,11 +286,11 @@ struct TripEditView: View {
                         }
                     Button { rates.removeAll { $0.currency == r.currency } } label: {
                         Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.textMuted)
-                            .frame(width: 32, height: 40)
+                            .frame(width: 44, height: 44)
                     }
-                    .accessibilityLabel("移除")
+                    .accessibilityLabel("移除 \(currencyNames[r.currency] ?? r.currency)")
                 }
-                .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 8)
+                .padding(.leading, 12).padding(.vertical, 6)
             }
         }
         .ledgerCard(padding: 0)
@@ -338,15 +352,25 @@ struct TripEditView: View {
         trip.navApp = navApp
         let id = trip.id ?? 0
         let rateRows = rates.compactMap { r in Double(r.value).flatMap { $0 > 0 ? TripCurrencyRate(tripId: id, currency: r.currency, rate: $0) : nil } }
-        if let old = initial?.coverPath, old != cover { model.files.delete(old) }
+        var saved = false
         if initial == nil {
             var newId: Int64?
             if model.write({ newId = try Q.createTrip($0, trip, members: members, rates: rateRows) }), let newId {
+                saved = true
                 dismiss()
                 model.openTrip(newId)
             }
         } else {
-            if model.write({ try Q.updateTrip($0, trip, members: members, rates: rateRows) }) { dismiss() }
+            if model.write({ try Q.updateTrip($0, trip, members: members, rates: rateRows) }) {
+                saved = true
+                dismiss()
+            }
+        }
+        if saved {
+            // The replaced cover goes only once the trip no longer points at it.
+            if let old = initial?.coverPath, old != cover { model.files.delete(old) }
+        } else {
+            model.show("儲存失敗")
         }
     }
 }

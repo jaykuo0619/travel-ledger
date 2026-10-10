@@ -105,7 +105,7 @@ struct TripView: View {
             // Beside the sidebar there is nothing to go back to.
             if !model.wide {
                 Button { model.closeTrip() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold)).frame(width: 36, height: 44)
+                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold)).frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("所有旅程")
             }
@@ -138,7 +138,7 @@ struct TripView: View {
             .coachTarget(.tripMenu)
         }
         .foregroundStyle(Palette.onBackground)
-        .padding(.leading, model.wide ? 16 : 6)
+        .padding(.leading, model.wide ? 16 : 0)
         .padding(.trailing, 4)
         .frame(minHeight: 64)
     }
@@ -192,6 +192,7 @@ private struct TabBar: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
             .readableWidth()
@@ -220,6 +221,7 @@ struct Segmented: View {
                         .background(on ? Palette.card : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
         .padding(3)
@@ -243,7 +245,7 @@ private struct PlanTab: View {
                 Segmented(options: ["依天", "依類型"], selected: byType ? 1 : 0) { byType = $0 == 1 }.coachTarget(.planGrouping)
                 if plans.isEmpty, notes.isEmpty {
                     EmptyState(symbol: "map", title: trip.readOnly ? "對方還沒有安排行程" : "還沒有行程",
-                               message: trip.readOnly ? "等對方排好再分享一次就看得到。" : "新增行程的功能下一版就來;電腦排好的行程檔現在就能匯入。")
+                               message: trip.readOnly ? "等對方排好再分享一次就看得到。" : "匯入電腦排好的行程檔,或同伴分享的旅程,行程就會出現在這裡。")
                 } else {
                     if !needBooking.isEmpty {
                         HStack(spacing: 10) {
@@ -271,7 +273,7 @@ private struct PlanTab: View {
         let looseNote = notes[unscheduledDay]
         if !unscheduled.isEmpty || looseNote != nil {
             SectionHeader("待排 · \(unscheduled.count) 項")
-            if let looseNote { DayNoteCard(text: looseNote) }
+            if let looseNote { DayNoteCard(text: looseNote).id(looseNote) }
             if !unscheduled.isEmpty { PlanCard(rows: unscheduled, trip: trip, showDate: false) }
         }
         ForEach(Array(trip.startDate ... max(trip.startDate, trip.endDate)), id: \.self) { day in
@@ -282,7 +284,7 @@ private struct PlanTab: View {
                 Spacer(minLength: 0)
             }
             .padding(.leading, 4).padding(.top, 6)
-            if let n = notes[day] { DayNoteCard(text: n) }
+            if let n = notes[day] { DayNoteCard(text: n).id(n) }
             if rows.isEmpty {
                 Text("還沒有安排").appFont(size: 15).foregroundStyle(Palette.textMuted).padding(.leading, 4)
             } else {
@@ -489,7 +491,7 @@ private struct LedgerTab: View {
                     CategoryCard(expenses: expenses, selected: filter) { c in filter = filter == .some(c) ? nil : .some(c) }
                 } else {
                     EmptyState(symbol: "list.bullet.rectangle.portrait", title: "還沒有支出",
-                               message: trip.readOnly ? "對方還沒有記帳" : "記帳的功能下一版就來")
+                               message: trip.readOnly ? "對方還沒有記帳" : "匯入同伴分享的旅程或備份後,支出會出現在這裡。")
                 }
                 ForEach(days) { g in
                     let date = g.key, rows = g.items
@@ -555,7 +557,7 @@ private struct SummaryCard: View {
                 if let budget {
                     let f = total / budget
                     VStack(alignment: .trailing, spacing: 0) {
-                        Text("\(javaRound(f * 100))%").appFont(size: 17, weight: .semibold).foregroundStyle(budgetColor(f))
+                        Text(verbatim: "\(javaRound(f * 100))%").appFont(size: 17, weight: .semibold).foregroundStyle(budgetColor(f))
                         Text("預算 \(fmtMoney(budget))").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1).fixedSize()
                     }
                 }
@@ -645,7 +647,7 @@ private struct CategoryCard: View {
                     HStack(spacing: 4) {
                         Text(c.name).appFont(size: 15).lineLimit(1)
                         Spacer(minLength: 0)
-                        Text("\(javaRound(c.amount / total * 100))%").appFont(size: 13, weight: .medium).foregroundStyle(c.style.color).fixedSize()
+                        Text(verbatim: "\(javaRound(c.amount / total * 100))%").appFont(size: 13, weight: .medium).foregroundStyle(c.style.color).fixedSize()
                     }
                     Text(fmtMoney(c.amount)).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).tnum().lineLimit(1)
                 }

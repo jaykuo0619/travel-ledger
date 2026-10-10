@@ -75,7 +75,7 @@ struct SettingsView: View {
                         AppIconView(size: 40)
                         VStack(alignment: .leading, spacing: 1) {
                             Text("卡溜趴").appFont(size: 16)
-                            Text("版本 \(model.appVersion) · 資料只存在這支手機,記得定期備份")
+                            Text("版本 \(model.appVersion) · 資料只存在這支手機")
                                 .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                         }
                         Spacer(minLength: 0)
@@ -104,7 +104,7 @@ struct SettingsView: View {
             Button("取消", role: .cancel) {}
             Button("確定") { model.settings.myName = String(nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20)) }
         }
-        .fileImporter(isPresented: $picking, allowedContentTypes: [.zip]) { result in
+        .fileImporter(isPresented: $picking, allowedContentTypes: [.zip, .data]) { result in
             switch result {
             case .success(let url):
                 // On an iPad settings is a sheet; the import sheet can only follow once it has gone.
@@ -147,6 +147,7 @@ private struct OptionCard: View {
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(selected ? Palette.primary : Palette.hairline, lineWidth: selected ? 1.5 : 1))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

@@ -274,17 +274,38 @@ struct PhotoViewer: View {
 private struct ZoomableImage: View {
     let path: String
     @State private var scale: CGFloat = 1
+    @State private var offset: CGSize = .zero
     @GestureState private var pinch: CGFloat = 1
+    @GestureState private var drag: CGSize = .zero
 
     var body: some View {
         LocalImage(path: path, maxPixel: 2000, contentMode: .fit) { ProgressView().tint(.white) }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scaleEffect(scale * pinch)
+            .offset(x: offset.width + drag.width, y: offset.height + drag.height)
             .gesture(
                 MagnificationGesture()
                     .updating($pinch) { v, s, _ in s = v }
-                    .onEnded { v in scale = min(max(scale * v, 1), 4) }
+                    .onEnded { v in
+                        scale = min(max(scale * v, 1), 4)
+                        if scale == 1 { offset = .zero }
+                    }
             )
-            .onTapGesture(count: 2) { withAnimation { scale = scale > 1 ? 1 : 2.5 } }
+            // Moving the picture only while it is zoomed, so swiping between photos still works at 1×.
+            .simultaneousGesture(
+                DragGesture()
+                    .updating($drag) { v, s, _ in if scale > 1 { s = v.translation } }
+                    .onEnded { v in
+                        if scale > 1 { offset = CGSize(width: offset.width + v.translation.width, height: offset.height + v.translation.height) }
+                    },
+                including: scale > 1 ? .all : .subviews
+            )
+            .onTapGesture(count: 2) {
+                withAnimation {
+                    scale = scale > 1 ? 1 : 2.5
+                    offset = .zero
+                }
+            }
+            .clipped()
     }
 }

@@ -1,5 +1,6 @@
 import LedgerCore
 import SwiftUI
+import UIKit
 
 @main
 struct TravelLedgerApp: App {
@@ -130,5 +131,17 @@ struct ToastView: View {
                 }
                 .allowsHitTesting(false)
         }
+    }
+}
+
+/// The trip screens hide the navigation bar, which also turns off the swipe-back gesture; this keeps it.
+extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
+    override open func viewDidLoad() {
+        super.viewDidLoad()
+        interactivePopGestureRecognizer?.delegate = self
+    }
+
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        viewControllers.count > 1
     }
 }

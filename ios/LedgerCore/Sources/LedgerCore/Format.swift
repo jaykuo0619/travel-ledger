@@ -59,7 +59,11 @@ private func symbol(_ currency: String) -> String { currency == homeCurrency ? "
 /// Java's Math.round: half up toward positive infinity.
 public func javaRound(_ v: Double) -> Int64 {
     guard v.isFinite else { return 0 }
-    return Int64((v + 0.5).rounded(.down))
+    let r = (v + 0.5).rounded(.down)
+    // Java clamps to Long.MIN_VALUE / MAX_VALUE; Int64(r) would trap out of range.
+    if r >= 9.2e18 { return .max }
+    if r <= -9.2e18 { return .min }
+    return Int64(r)
 }
 
 private func grouped(_ n: Int64) -> String {

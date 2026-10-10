@@ -25,7 +25,8 @@ struct ImportHost: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .task(id: model.incoming) { await prepare() }
+            // Another sheet (trip editor, settings) has to close first; the file waits.
+            .task(id: Waiting(file: model.incoming, blocked: model.editing != nil || model.showSettings)) { await prepare() }
             .sheet(item: $step, onDismiss: { if !busy, model.incoming != nil { model.cancelImport() } }) { s in
                 Group {
                     switch s {
@@ -45,8 +46,16 @@ struct ImportHost: ViewModifier {
             }
     }
 
+    private struct Waiting: Equatable {
+        let file: URL?
+        let blocked: Bool
+    }
+
     private func prepare() async {
-        guard let url = model.incoming else { return }
+        guard let url = model.incoming, model.editing == nil, !model.showSettings else { return }
+        // Give a closing sheet time to leave before the next one is presented.
+        try? await Task.sleep(for: .milliseconds(350))
+        guard model.incoming == url else { return }
         let archive = model.archive
         let outcome: Result<ImportStep, Error> = await Task.detached(priority: .userInitiated) {
             Result<ImportStep, Error> {

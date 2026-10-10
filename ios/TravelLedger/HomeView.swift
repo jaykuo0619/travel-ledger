@@ -92,6 +92,7 @@ struct HomeView: View {
                     Image(systemName: "plus").font(.system(size: 18, weight: .semibold))
                         .frame(width: 40, height: 40)
                         .background(Palette.secondaryContainer, in: Circle())
+                        .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("新增旅程")
                 .coachTarget(.addTrip)
@@ -141,6 +142,7 @@ private struct FilterTabs: View {
                         .background(on ? Palette.card : Palette.surfaceVariant, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
         .padding(4)
@@ -212,7 +214,7 @@ private struct FeaturedTripCard: View {
     private func budgetText(_ budget: Double, alignment: HorizontalAlignment) -> some View {
         let f = trip.totalHome / budget
         return VStack(alignment: alignment, spacing: 0) {
-            Text("\(javaRound(f * 100))%").appFont(size: 16, weight: .semibold).foregroundStyle(budgetColor(f))
+            Text(verbatim: "\(javaRound(f * 100))%").appFont(size: 16, weight: .semibold).foregroundStyle(budgetColor(f))
             Text("預算 \(fmtMoney(budget))").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant).lineLimit(1).fixedSize()
         }
     }

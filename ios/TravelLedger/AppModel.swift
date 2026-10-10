@@ -129,11 +129,14 @@ final class AppModel {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("incoming", isDirectory: true)
-        try? FileManager.default.removeItem(at: dir)
+        // A file that arrives while another is waiting replaces it; each has its own copy, so an import that
+        // is already running keeps the file it started with.
+        let previous = incoming
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let copy = dir.appendingPathComponent("import.zip")
+            let copy = dir.appendingPathComponent(UUID().uuidString + ".zip")
             try FileManager.default.copyItem(at: url, to: copy)
+            if let previous { try? FileManager.default.removeItem(at: previous) }
             // Files opened from other apps land in Documents/Inbox; we keep our own copy only.
             if url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: url) }
             incoming = copy

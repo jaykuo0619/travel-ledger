@@ -345,6 +345,7 @@ struct SelectPill<Leading: View>: View {
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(selected ? Palette.primary : Palette.hairline, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
