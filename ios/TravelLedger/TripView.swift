@@ -28,8 +28,8 @@ struct TripView: View {
         if let trip = model.read({ try Q.trip($0, tripId) }) ?? nil {
             let current = tab ?? ShownTab.default(trip, today: today)
             VStack(spacing: 0) {
-                header(trip, today: today)
-                if trip.readOnly { ReadOnlyBanner(trip: trip).padding(.horizontal, 16).padding(.vertical, 4) }
+                header(trip, today: today).readableWidth()
+                if trip.readOnly { ReadOnlyBanner(trip: trip).padding(.horizontal, 16).padding(.vertical, 4).readableWidth() }
                 Group {
                     switch current {
                     case .plan: PlanTab(trip: trip)
@@ -144,6 +144,7 @@ private struct TabBar: View {
                     .buttonStyle(.plain)
                 }
             }
+            .readableWidth()
         }
         .background(Palette.card.ignoresSafeArea(edges: .bottom))
     }
@@ -210,6 +211,7 @@ private struct PlanTab: View {
             .padding(.horizontal, 16)
             .padding(.top, 4)
             .padding(.bottom, 40)
+            .readableWidth()
         }
     }
 
@@ -454,6 +456,7 @@ private struct LedgerTab: View {
             .padding(.horizontal, 16)
             .padding(.top, 4)
             .padding(.bottom, 40)
+            .readableWidth()
         }
     }
 }

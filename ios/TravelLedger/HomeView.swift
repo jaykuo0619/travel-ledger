@@ -38,6 +38,7 @@ struct HomeView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 32)
+            .readableWidth()
         }
         .background(Palette.background)
         .toolbar(.hidden, for: .navigationBar)

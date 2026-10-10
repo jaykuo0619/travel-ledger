@@ -71,6 +71,7 @@ struct SettingsView: View {
             .foregroundStyle(Palette.onBackground)
             .padding(.horizontal, 16)
             .padding(.bottom, 32)
+            .readableWidth()
         }
         .background(Palette.background)
         .navigationTitle("設定")

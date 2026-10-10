@@ -141,6 +141,7 @@ struct PlanDetailView: View {
         .foregroundStyle(Palette.onBackground)
         .padding(.horizontal, 16)
         .padding(.bottom, 32)
+        .readableWidth()
     }
 }
 
@@ -211,6 +212,7 @@ struct ExpenseDetailView: View {
         .foregroundStyle(Palette.onBackground)
         .padding(.horizontal, 16)
         .padding(.bottom, 32)
+        .readableWidth()
     }
 }
 

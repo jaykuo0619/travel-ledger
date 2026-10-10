@@ -65,6 +65,9 @@ extension View {
     /// Numbers line up in lists (Android's "tnum").
     func tnum() -> some View { monospacedDigit() }
 
+    /// On an iPad, content stays a comfortable column in the middle instead of stretching edge to edge.
+    func readableWidth() -> some View { frame(maxWidth: 700).frame(maxWidth: .infinity) }
+
     /// A white rounded card on the grey background.
     func cardStyle(radius: CGFloat = Radius.medium, padding: CGFloat = 16) -> some View {
         self.padding(padding)
