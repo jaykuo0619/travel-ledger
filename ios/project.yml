@@ -13,7 +13,7 @@ packages:
 settings:
   base:
     MARKETING_VERSION: "0.4.0"
-    CURRENT_PROJECT_VERSION: "4"
+    CURRENT_PROJECT_VERSION: "5"
     SWIFT_VERSION: "5.0"
     # Automatic signing: pick your team in Xcode (Signing & Capabilities). Certificates stay in the Mac's keychain.
     CODE_SIGN_STYLE: Automatic

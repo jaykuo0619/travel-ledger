@@ -108,6 +108,18 @@ struct RootView: View {
             if model.incoming == nil, model.path.isEmpty, model.selectedTrip == nil, let id = model.tripToOpenAtLaunch() {
                 model.openTrip(id)
             }
+            #if DEBUG
+            // Screenshots without tapping: KALIUPA_SHOT may also name "detail" (the first plan item of today in
+            // the side panel) or "journal".
+            let shot = ProcessInfo.processInfo.environment["KALIUPA_SHOT"] ?? ""
+            if let id = model.selectedTrip {
+                try? await Task.sleep(for: .seconds(4))
+                if shot.contains("detail"), let plan = (model.read { try Q.planRows($0, id) } ?? []).first(where: { $0.photoCount == 0 && $0.reservation == Reservation.booked }) {
+                    model.openDetail(Route.plan(plan.id))
+                }
+                if shot.contains("journal") { model.journaling = JournalTarget(tripId: id) }
+            }
+            #endif
         }
     }
 

@@ -38,7 +38,7 @@ struct TripView: View {
     var body: some View {
         let today = todayEpochDay()
         if let trip = model.read({ try Q.trip($0, tripId) }) ?? nil {
-            let current = tab ?? ShownTab.default(trip, today: today)
+            let current = tab ?? Self.screenshotTab ?? ShownTab.default(trip, today: today)
             GeometryReader { geo in
                 // On an iPad with room for two columns the plan and the ledger are both on screen, no tabs.
                 let columns = model.wide && geo.size.width >= 720
@@ -113,6 +113,17 @@ struct TripView: View {
         } else {
             Color.clear.background(Palette.background)
         }
+    }
+
+    /// Debug builds only: KALIUPA_SHOT=stats (or plan, ledger, today) opens on that tab, for taking screenshots
+    /// in a simulator without tapping.
+    private static var screenshotTab: ShownTab? {
+        #if DEBUG
+        let want = ProcessInfo.processInfo.environment["KALIUPA_SHOT"] ?? ""
+        return want.split(separator: ",").compactMap { part in ShownTab.allCases.first { "\($0)" == part } }.first
+        #else
+        return nil
+        #endif
     }
 
     /// The first-run tutorial for a trip.

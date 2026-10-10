@@ -610,17 +610,18 @@ enum CameraMode: String, Identifiable {
 }
 
 /// Reads the text in a picture on the device (Vision), as lines with their boxes in pixels from the top-left.
-/// The script follows the currency being recorded: JPY → Japanese, KRW → Korean, otherwise Chinese + English.
+/// The currency being recorded hints at the script (JPY → Japanese, KRW → Korean, otherwise Chinese first).
 func recognizeText(_ data: Data, currency: String) -> [OcrLine] {
     guard let jpeg = downscaledJPEG(data, maxEdge: 2400, quality: 0.9), let image = UIImage(data: jpeg)?.cgImage else { return [] }
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = false
-    switch currency {
-    case "JPY": request.recognitionLanguages = ["ja-JP", "en-US"]
-    case "KRW": request.recognitionLanguages = ["ko-KR", "en-US"]
-    default: request.recognitionLanguages = ["zh-Hant", "zh-Hans", "en-US"]
-    }
+    // The currency says which script to expect first, but a receipt from another country still has to be read
+    // (a Japanese receipt while the trip is in KRW), so the other scripts follow and the language is detected.
+    let all = ["zh-Hant", "ja-JP", "ko-KR", "zh-Hans", "en-US"]
+    let first = currency == "JPY" ? "ja-JP" : currency == "KRW" ? "ko-KR" : "zh-Hant"
+    request.recognitionLanguages = [first] + all.filter { $0 != first }
+    request.automaticallyDetectsLanguage = true
     do { try VNImageRequestHandler(cgImage: image, options: [:]).perform([request]) } catch { return [] }
     let w = Double(image.width), h = Double(image.height)
     return (request.results ?? []).compactMap { o in
