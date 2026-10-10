@@ -118,6 +118,7 @@ struct ExpenseEditView: View {
         .interactiveDismissDisabled()
         .tint(Palette.primary)
         .onAppear(perform: load)
+        .onAppear { model.refreshReferenceRates() }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in withAnimation(.easeOut(duration: 0.2)) { keyboardUp = true } }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in withAnimation(.easeOut(duration: 0.2)) { keyboardUp = false } }
         .onChange(of: photoItems) { _, items in
@@ -381,6 +382,8 @@ struct ExpenseEditView: View {
     private func setCurrency(_ code: String) {
         currency = code
         rate = Q.rateText(code, tripRates: tripRates, last: lastExpense)
+        // No rate known for this trip yet: start from today's reference rate (still editable).
+        if rate.isEmpty, let suggested = model.suggestedRate(code) { rate = suggested }
         if !currencies.contains(code) { currencies.append(code) }
     }
 

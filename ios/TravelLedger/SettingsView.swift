@@ -46,6 +46,19 @@ struct SettingsView: View {
                     .tint(Palette.primary)
                     .padding(.horizontal, 14).padding(.vertical, 12)
                     Divider().overlay(Palette.hairline).padding(.leading, 68)
+                    Toggle(isOn: $model.settings.autoRates) {
+                        HStack(spacing: 14) {
+                            IconTile(symbol: "dollarsign.arrow.circlepath", color: Palette.category(8), size: 40)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("自動帶入參考匯率").appFont(size: 16)
+                                Text("新增幣別時上網查當天匯率(每天最多一次),可以自己改;關掉就完全不連網。匯率來源:ExchangeRate-API(open.er-api.com)")
+                                    .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    .tint(Palette.primary)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    Divider().overlay(Palette.hairline).padding(.leading, 68)
                     NavigationLink { CategoryManageView() } label: {
                         SettingRow(symbol: "square.grid.2x2.fill", color: Palette.category(2), title: "分類管理", subtitle: "新增、排序、自訂圖示與顏色", action: nil, chevron: true)
                     }

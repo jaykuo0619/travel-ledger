@@ -87,4 +87,18 @@ final class ExpenseTests: XCTestCase {
         try phone.db.write { try Q.deletePaymentMethod($0, card) }
         XCTAssertNil(try phone.expenses(tripId)[0].paymentMethodId)
     }
+
+    func testReferenceRates() throws {
+        let json = #"{"result":"success","base_code":"TWD","rates":{"TWD":1,"JPY":4.6860,"KRW":42.65,"USD":0.03110,"XXX":0}}"#
+        let r = try XCTUnwrap(ReferenceRates.parse(Data(json.utf8), now: 1000))
+        XCTAssertEqual("0.2134", r.suggestion("JPY"))
+        XCTAssertEqual("0.02345", r.suggestion("KRW"))
+        XCTAssertEqual("32.15", r.suggestion("USD"))
+        XCTAssertNil(r.suggestion("TWD")) // the home currency is always 1
+        XCTAssertNil(r.suggestion("XXX"))
+        XCTAssertNil(r.suggestion("ABC"))
+        XCTAssertFalse(r.isStale(now: 1000 + 3_600_000))
+        XCTAssertTrue(r.isStale(now: 1000 + 90_000_000))
+        XCTAssertNil(ReferenceRates.parse(Data(#"{"result":"error"}"#.utf8)))
+    }
 }

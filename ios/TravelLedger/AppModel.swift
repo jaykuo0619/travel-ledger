@@ -96,6 +96,35 @@ final class AppModel {
         return LedgerCore.tripToOpenAtLaunch(trips, today: todayEpochDay())
     }
 
+    // MARK: Reference exchange rates
+
+    /// The last rates fetched (kept between launches), for prefilling a rate; nil until the first fetch.
+    private(set) var referenceRates: ReferenceRates? = {
+        UserDefaults.standard.data(forKey: "reference_rates").flatMap { try? JSONDecoder().decode(ReferenceRates.self, from: $0) }
+    }()
+    private var fetchingRates = false
+
+    /// A rate to prefill for [currency] (the user can always change it); nil when the setting is off or none is known.
+    func suggestedRate(_ currency: String) -> String? {
+        settings.autoRates ? referenceRates?.suggestion(currency) : nil
+    }
+
+    /// Fetches today's reference rates when the setting is on and the saved ones are more than a day old.
+    /// The request names no trip, no amounts and nothing about the user; offline, the saved rates keep working.
+    func refreshReferenceRates() {
+        guard settings.autoRates, !fetchingRates, referenceRates?.isStale() ?? true,
+              let url = URL(string: "https://open.er-api.com/v6/latest/TWD") else { return }
+        fetchingRates = true
+        Task {
+            defer { fetchingRates = false }
+            var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+            request.httpShouldHandleCookies = false
+            guard let (data, _) = try? await URLSession.shared.data(for: request), let rates = ReferenceRates.parse(data) else { return }
+            referenceRates = rates
+            if let saved = try? JSONEncoder().encode(rates) { UserDefaults.standard.set(saved, forKey: "reference_rates") }
+        }
+    }
+
     // MARK: Navigation
 
     /// Opens a trip: beside the sidebar on an iPad, pushed on a phone.
@@ -233,6 +262,8 @@ struct AppSettings: Equatable {
     var fontSize = FontScale.standard
     /// Copy "memory" photos to the photo library automatically.
     var saveMemoriesToGallery = true
+    /// Prefill exchange rates from the network (once a day); off = nothing is ever fetched.
+    var autoRates = true
     /// Delete the .zip picked in 設定 →「從檔案還原或匯入」 once it has been imported.
     var deleteImportedFile = true
     /// Shown on trips shared with companions.
@@ -249,6 +280,7 @@ struct AppSettings: Equatable {
         s.theme = d.string(forKey: "theme_mode").flatMap(ThemeMode.init(rawValue:)) ?? .system
         s.fontSize = d.string(forKey: "font_size").flatMap(FontScale.init(rawValue:)) ?? .standard
         s.saveMemoriesToGallery = d.object(forKey: "save_memories") as? Bool ?? true
+        s.autoRates = d.object(forKey: "auto_rates") as? Bool ?? true
         s.deleteImportedFile = d.object(forKey: "delete_imported_file") as? Bool ?? true
         s.myName = d.string(forKey: "my_name") ?? ""
         s.lastBackupDay = (d.object(forKey: "last_backup_day") as? NSNumber)?.int64Value ?? -1
@@ -261,6 +293,7 @@ struct AppSettings: Equatable {
         d.set(theme.rawValue, forKey: "theme_mode")
         d.set(fontSize.rawValue, forKey: "font_size")
         d.set(saveMemoriesToGallery, forKey: "save_memories")
+        d.set(autoRates, forKey: "auto_rates")
         d.set(deleteImportedFile, forKey: "delete_imported_file")
         d.set(myName, forKey: "my_name")
         d.set(NSNumber(value: lastBackupDay), forKey: "last_backup_day")

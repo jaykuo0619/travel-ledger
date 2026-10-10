@@ -97,7 +97,7 @@ struct TripEditView: View {
                     }
                     if !rates.isEmpty { ratesCard }
                     AddChip("新增幣別") { addingCurrency = true }
-                    Text("所有總計以新台幣計算;記帳時每筆的匯率仍可個別修改。")
+                    Text(model.settings.autoRates ? "所有總計以新台幣計算;新增幣別時會先帶入當天的參考匯率,可以自己改;記帳時每筆的匯率仍可個別修改。" : "所有總計以新台幣計算;記帳時每筆的匯率仍可個別修改。")
                         .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
 
                     FieldBox("預算(選填)") {
@@ -154,6 +154,7 @@ struct TripEditView: View {
         .overlay(alignment: .bottom) { ToastView() }
         .interactiveDismissDisabled()
         .onAppear(perform: load)
+        .onAppear { model.refreshReferenceRates() }
         .sheet(item: $picking) { field in
             if field == .start {
                 DayPickerSheet(title: "出發日期", initial: start) { d in
@@ -167,7 +168,10 @@ struct TripEditView: View {
         }
         .sheet(isPresented: $addingCurrency) {
             CurrencyPickerSheet(current: "") { c in
-                if c != homeCurrency, !rates.contains(where: { $0.currency == c }) { rates.append(RateDraft(currency: c, value: "")) }
+                // The reference rate is only a starting point; the field stays editable.
+                if c != homeCurrency, !rates.contains(where: { $0.currency == c }) {
+                    rates.append(RateDraft(currency: c, value: model.suggestedRate(c) ?? ""))
+                }
             }
         }
         .alert("新增成員", isPresented: $addingMember) {
