@@ -147,3 +147,9 @@ public func safeFileName(_ name: String) -> String {
     let cut = String(out.prefix(40))
     return cut.isEmpty ? "旅程" : cut
 }
+
+/// "2026-10-22" for the backup file's name.
+public func fmtISODate(_ epochDay: Int64) -> String {
+    let d = epochDay.civil
+    return String(format: "%04d-%02d-%02d", d.year, d.month, d.day)
+}

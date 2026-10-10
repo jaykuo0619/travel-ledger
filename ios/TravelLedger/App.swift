@@ -72,6 +72,7 @@ struct RootView: View {
         .sheet(item: $model.planEditing) { PlanEditView(target: $0) }
         .sheet(item: $model.dayNoteEditing) { DayNoteSheet(target: $0) }
         .sheet(item: $model.expenseEditing) { ExpenseEditView(target: $0) }
+        .sheet(item: $model.sharing) { ShareView(target: $0) }
         .sheet(isPresented: $model.showSettings) {
             NavigationStack {
                 SettingsView()

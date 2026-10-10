@@ -190,4 +190,12 @@ final class TripListTests: XCTestCase {
         let c = SVGPath.parse("M10 0c0-.83-.67-1.5-1.5-1.5")
         XCTAssertEqual(c[1], .cubic(SVGPoint(10, -0.83), SVGPoint(9.33, -1.5), SVGPoint(8.5, -1.5)))
     }
+
+    func testSafeFileName() {
+        XCTAssertEqual("首爾賞楓", safeFileName("首爾賞楓"))
+        XCTAssertEqual("a_b_c", safeFileName("a / b:  c"))
+        XCTAssertEqual("旅程", safeFileName(""))
+        XCTAssertEqual(40, safeFileName(String(repeating: "旅", count: 60)).count)
+        XCTAssertEqual("2026-10-22", fmtISODate(20748))
+    }
 }

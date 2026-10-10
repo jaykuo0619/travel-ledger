@@ -24,6 +24,9 @@ struct HomeView: View {
                     PillButton("新增旅程", symbol: "plus", height: 50) { model.editing = EditTarget(tripId: nil) }
                         .coachTarget(.addTrip)
                 }
+                if let due = backupReminder(trips, today: today, lastBackupDay: model.settings.lastBackupDay, dismissedDay: model.settings.reminderDismissedDay) {
+                    BackupReminderCard(trip: due)
+                }
                 if !trips.isEmpty {
                     FilterTabs(selected: current, counts: [
                         .active: activeCount, .ended: trips.count - activeCount, .all: trips.count,

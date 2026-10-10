@@ -66,6 +66,20 @@ struct SettingsView: View {
                         editName = true
                     }
                     Divider().overlay(Palette.hairline).padding(.leading, 68)
+                    SettingRow(symbol: "externaldrive.fill", color: Palette.category(6), title: "備份全部資料",
+                               subtitle: model.settings.lastBackupDay >= 0 ? "上次備份:\(fmtShortDate(model.settings.lastBackupDay))" : "還沒有備份過") {
+                        // On an iPad settings is itself a sheet; the backup sheet follows it.
+                        if model.showSettings {
+                            model.showSettings = false
+                            Task {
+                                try? await Task.sleep(for: .milliseconds(450))
+                                model.sharing = .backup
+                            }
+                        } else {
+                            model.sharing = .backup
+                        }
+                    }
+                    Divider().overlay(Palette.hairline).padding(.leading, 68)
                     SettingRow(symbol: "arrow.counterclockwise", color: Palette.category(5), title: "從檔案還原或匯入",
                                subtitle: "備份檔,或同伴分享的旅程") { picking = true }
                     Divider().overlay(Palette.hairline).padding(.leading, 68)
@@ -101,7 +115,7 @@ struct SettingsView: View {
                         AppIconView(size: 40)
                         VStack(alignment: .leading, spacing: 1) {
                             Text("卡溜趴").appFont(size: 16)
-                            Text("版本 \(model.appVersion) · 資料只存在這支手機")
+                            Text("版本 \(model.appVersion) · 資料只存在這支手機,記得定期備份")
                                 .appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
                         }
                         Spacer(minLength: 0)

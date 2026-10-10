@@ -101,7 +101,7 @@ struct TripView: View {
                       text: "「行程」是每天的安排和還沒排日期的「待排」;「帳本」是每一筆花費;「統計」是圖表。中間的「+」是記一筆:輸入金額、選分類就記好了。"),
             CoachStep(target: .planGrouping, title: "依天或依類型", text: "行程可以照日期排,也可以照吃、交通、景點等類型分組。點一個行程或一筆支出,看它的詳細內容。"),
             CoachStep(target: .tripMenu, title: "更多功能",
-                      text: trip.readOnly ? "這趟是同伴分享的,只能看、不能改。這裡可以回到所有旅程,或刪除你手機上的這份副本。" : "這裡可以編輯旅程(名稱、日期、成員、匯率)、回到所有旅程,或刪除旅程。"),
+                      text: trip.readOnly ? "這趟是同伴分享的,對方的內容只能看。你可以補充行程和支出,再按上面的「傳給記帳人」。這裡可以再分享、回到所有旅程,或刪除你手機上的這份副本。" : "這裡可以編輯旅程(名稱、日期、成員、匯率)、把旅程分享給同伴(做成檔案傳到 LINE)、傳到電腦排行程,或刪除旅程。"),
         ]
     }
 
@@ -155,6 +155,10 @@ struct TripView: View {
                 if !trip.readOnly {
                     Button { model.editing = EditTarget(tripId: tripId) } label: { Label("編輯旅程", systemImage: "pencil") }
                 }
+                Button { model.sharing = .trip(tripId) } label: { Label("分享給同伴", systemImage: "square.and.arrow.up") }
+                if !trip.readOnly {
+                    Button { model.sharing = .desktop(tripId) } label: { Label("傳到電腦排行程", systemImage: "desktopcomputer") }
+                }
                 Button { model.closeTrip() } label: { Label("所有旅程", systemImage: "suitcase.rolling") }
                 Button(role: .destructive) { confirmDelete = true } label: { Label("刪除旅程", systemImage: "trash") }
             } label: {
@@ -185,6 +189,16 @@ struct ReadOnlyBanner: View {
                 if pending > 0 { Text(verbatim: "我補充了 \(pending) 項").appFont(size: 13).foregroundStyle(Palette.warning) }
             }
             Spacer(minLength: 0)
+            if pending > 0 {
+                Button { model.sharing = .additions(trip.id ?? 0) } label: {
+                    Text("傳給記帳人").appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
+                        .foregroundStyle(Palette.onPrimary)
+                        .padding(.horizontal, 12).frame(minHeight: 36)
+                        .background(Palette.primary, in: Capsule())
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .foregroundStyle(Palette.onSecondaryContainer)
         .padding(.horizontal, 12)
@@ -326,7 +340,7 @@ private struct PlanTab: View {
                 }
                 if plans.isEmpty, notes.isEmpty {
                     EmptyState(symbol: "map", title: trip.readOnly ? "對方還沒有安排行程" : "把出發前做的功課放進來",
-                               message: trip.readOnly ? "你想去的地方可以先加進來,會先算「我的補充」。" : "想去的景點、要訂位的餐廳都可以先放進「待排」,之後再排到某一天。")
+                               message: trip.readOnly ? "你想去的地方可以先加進來,再按上方「傳給記帳人」。" : "想去的景點、要訂位的餐廳都可以先放進「待排」,之後再排到某一天。")
                 } else {
                     if !needBooking.isEmpty {
                         HStack(spacing: 10) {
