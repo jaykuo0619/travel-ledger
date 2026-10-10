@@ -32,6 +32,32 @@ struct SettingsView: View {
                     }
                 }
 
+                SectionHeader("記帳")
+                VStack(spacing: 0) {
+                    Toggle(isOn: $model.settings.saveMemoriesToGallery) {
+                        HStack(spacing: 14) {
+                            IconTile(symbol: "photo.on.rectangle", color: Palette.category(1), size: 40)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("回憶照片自動存到相簿").appFont(size: 16)
+                                Text("收據不會存到相簿").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    .tint(Palette.primary)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    Divider().overlay(Palette.hairline).padding(.leading, 68)
+                    NavigationLink { CategoryManageView() } label: {
+                        SettingRow(symbol: "square.grid.2x2.fill", color: Palette.category(2), title: "分類管理", subtitle: "新增、排序、自訂圖示與顏色", action: nil, chevron: true)
+                    }
+                    .buttonStyle(.plain)
+                    Divider().overlay(Palette.hairline).padding(.leading, 68)
+                    NavigationLink { PaymentManageView() } label: {
+                        SettingRow(symbol: "creditcard.fill", color: Palette.category(0), title: "付款方式管理", subtitle: "現金、信用卡、行動支付…", action: nil, chevron: true)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .ledgerCard(padding: 0)
+
                 SectionHeader("備份與分享")
                 VStack(spacing: 0) {
                     SettingRow(symbol: "person.fill", color: Palette.category(4), title: "我的名字",
@@ -157,6 +183,8 @@ private struct SettingRow: View {
     let title: String
     let subtitle: String
     let action: (() -> Void)?
+    /// Show the › although the row has no action of its own (it sits inside a NavigationLink).
+    var chevron = false
 
     var body: some View {
         let row = HStack(spacing: 14) {
@@ -166,7 +194,7 @@ private struct SettingRow: View {
                 Text(subtitle).appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
             }
             Spacer(minLength: 0)
-            if action != nil { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.textMuted) }
+            if action != nil || chevron { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.textMuted) }
         }
         .foregroundStyle(Palette.onBackground)
         .padding(.horizontal, 14).padding(.vertical, 12)

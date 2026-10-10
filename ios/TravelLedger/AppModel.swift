@@ -31,8 +31,10 @@ final class AppModel {
     /// The plan item editor and the day note editor (sheets).
     var planEditing: PlanEditTarget?
     var dayNoteEditing: DayNoteTarget?
+    /// 記一筆 / editing an expense (a sheet).
+    var expenseEditing: ExpenseEditTarget?
     /// Some sheet of ours is up: another one (an import, a shortcut) has to wait.
-    var sheetOpen: Bool { editing != nil || showSettings || planEditing != nil || dayNoteEditing != nil }
+    var sheetOpen: Bool { editing != nil || showSettings || planEditing != nil || dayNoteEditing != nil || expenseEditing != nil }
     /// A file waiting to be imported (opened from LINE / Files, or picked in 設定).
     var incoming: URL?
     /// The file the user picked in 設定 for that import; deleted after a successful import if they want that.

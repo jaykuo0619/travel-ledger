@@ -1,17 +1,18 @@
 import LedgerCore
 import SwiftUI
 
-/// The tabs that exist so far: plans and the ledger (今天 and 統計 come with stages 3–4).
+/// The tabs of a trip: plans, the ledger and statistics (今天 is not built yet), with 記一筆 in the middle.
 enum ShownTab: String, CaseIterable {
-    case plan = "行程", ledger = "帳本"
+    case plan = "行程", ledger = "帳本", stats = "統計"
 
-    var symbol: String { self == .plan ? "map" : "list.bullet.rectangle.portrait" }
+    var symbol: String { self == .plan ? "map" : self == .ledger ? "list.bullet.rectangle.portrait" : "chart.pie" }
 
-    /// Before or during the trip: plans; after it: the ledger.
+    /// Before or during the trip: plans; after it: the statistics.
     static func `default`(_ trip: Trip, today: Int64) -> ShownTab {
         switch TripTab.default(start: trip.startDate, end: trip.endDate, today: today) {
         case .plan, .today: return .plan
-        case .ledger, .stats: return .ledger
+        case .ledger: return .ledger
+        case .stats: return .stats
         }
     }
 }
@@ -42,7 +43,21 @@ struct TripView: View {
                             column(ShownTab.plan) { PlanTab(trip: trip) }
                                 .frame(width: (geo.size.width * 0.54).rounded())
                             Divider().overlay(Palette.hairline)
-                            column(ShownTab.ledger) { LedgerTab(trip: trip, today: today) }
+                            // The right column is the ledger or the statistics; 記一筆 sits in its heading.
+                            let right = current == .stats ? ShownTab.stats : ShownTab.ledger
+                            VStack(alignment: .leading, spacing: 0) {
+                                HStack(spacing: 10) {
+                                    Segmented(options: [ShownTab.ledger.rawValue, ShownTab.stats.rawValue], selected: right == .stats ? 1 : 0) {
+                                        tab = $0 == 1 ? .stats : .ledger
+                                    }
+                                    .frame(maxWidth: 240)
+                                    Spacer(minLength: 0)
+                                    SmallAdd("記一筆") { model.expenseEditing = ExpenseEditTarget(tripId: tripId) }
+                                }
+                                .padding(.horizontal, 16).padding(.bottom, 2)
+                                if right == .stats { StatsTab(trip: trip) } else { LedgerTab(trip: trip, today: today) }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         }
                         .frame(maxHeight: .infinity)
                     } else {
@@ -50,10 +65,12 @@ struct TripView: View {
                             switch current {
                             case .plan: PlanTab(trip: trip)
                             case .ledger: LedgerTab(trip: trip, today: today)
+                            case .stats: StatsTab(trip: trip)
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        TabBar(current: current) { tab = $0 }.coachTarget(.tripTabs)
+                        TabBar(current: current, onAdd: { model.expenseEditing = ExpenseEditTarget(tripId: tripId) }) { tab = $0 }
+                            .coachTarget(.tripTabs)
                     }
                 }
             }
@@ -81,7 +98,7 @@ struct TripView: View {
             CoachStep(target: .tripTitle, title: "這趟旅程",
                       text: model.wide ? "這裡是旅程名稱、狀態和日期。左邊的列表可以直接切換到別趟旅程。" : "這裡是旅程名稱、狀態和日期。點它或左邊的箭頭,回到旅程列表。"),
             CoachStep(target: .tripTabs, title: "行程與帳本",
-                      text: "「行程」是每天的安排和還沒排日期的「待排」;「帳本」是總花費、分類和每一筆明細。寬螢幕會左右並排,其餘用下方的分頁切換。"),
+                      text: "「行程」是每天的安排和還沒排日期的「待排」;「帳本」是每一筆花費;「統計」是圖表。中間的「+」是記一筆:輸入金額、選分類就記好了。"),
             CoachStep(target: .planGrouping, title: "依天或依類型", text: "行程可以照日期排,也可以照吃、交通、景點等類型分組。點一個行程或一筆支出,看它的詳細內容。"),
             CoachStep(target: .tripMenu, title: "更多功能",
                       text: trip.readOnly ? "這趟是同伴分享的,只能看、不能改。這裡可以回到所有旅程,或刪除你手機上的這份副本。" : "這裡可以編輯旅程(名稱、日期、成員、匯率)、回到所有旅程,或刪除旅程。"),
@@ -187,32 +204,47 @@ struct ReadOnlyBanner: View {
 
 private struct TabBar: View {
     let current: ShownTab
+    let onAdd: () -> Void
     let onSelect: (ShownTab) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             Divider().overlay(Palette.hairline)
             HStack(spacing: 0) {
-                ForEach(ShownTab.allCases, id: \.self) { t in
-                    let on = t == current
-                    Button { onSelect(t) } label: {
-                        VStack(spacing: 2) {
-                            Image(systemName: t.symbol).font(.system(size: 18))
-                                .padding(.horizontal, 16).padding(.vertical, 3)
-                                .background(on ? Palette.primaryContainer : .clear, in: Capsule())
-                            Text(t.rawValue).appFont(size: 15, weight: .semibold)
-                        }
-                        .foregroundStyle(on ? Palette.primary : Palette.onSurfaceVariant)
+                item(.plan)
+                // 記一筆: the big button in the middle.
+                Button(action: onAdd) {
+                    Image(systemName: "plus").font(.system(size: 24, weight: .bold)).foregroundStyle(Palette.onPrimary)
+                        .frame(width: 56, height: 56)
+                        .background(Palette.primary, in: Circle())
+                        .shadow(color: Palette.primary.opacity(0.35), radius: 6, y: 3)
                         .frame(maxWidth: .infinity, minHeight: 60)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(on ? .isSelected : [])
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("記一筆")
+                item(.ledger)
+                item(.stats)
             }
             .readableWidth()
         }
         .background(Palette.card.ignoresSafeArea(edges: .bottom))
+    }
+
+    private func item(_ t: ShownTab) -> some View {
+        let on = t == current
+        return Button { onSelect(t) } label: {
+            VStack(spacing: 2) {
+                Image(systemName: t.symbol).font(.system(size: 18))
+                    .padding(.horizontal, 16).padding(.vertical, 3)
+                    .background(on ? Palette.primaryContainer : .clear, in: Capsule())
+                Text(t.rawValue).appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
+            }
+            .foregroundStyle(on ? Palette.primary : Palette.onSurfaceVariant)
+            .frame(maxWidth: .infinity, minHeight: 60)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
@@ -577,7 +609,7 @@ private struct LedgerTab: View {
                     CategoryCard(expenses: expenses, selected: filter) { c in filter = filter == .some(c) ? nil : .some(c) }
                 } else {
                     EmptyState(symbol: "list.bullet.rectangle.portrait", title: "還沒有支出",
-                               message: trip.readOnly ? "對方還沒有記帳" : "匯入同伴分享的旅程或備份後,支出會出現在這裡。")
+                               message: trip.readOnly ? "對方還沒有記帳;你記的會先算「我的補充」" : "點「+ 記一筆」記下第一筆")
                 }
                 ForEach(days) { g in
                     let date = g.key, rows = g.items
@@ -585,7 +617,7 @@ private struct LedgerTab: View {
                     VStack(spacing: 0) {
                         ForEach(rows) { e in
                             if e.id != rows.first?.id { Divider().overlay(Palette.hairline).padding(.leading, 66) }
-                            ExpenseRowItem(row: e)
+                            ExpenseRowItem(row: e, tripReadOnly: trip.readOnly)
                         }
                     }
                     .ledgerCard(padding: 0)
@@ -751,11 +783,22 @@ private struct CategoryCard: View {
 struct ExpenseRowItem: View {
     @Environment(AppModel.self) private var model
     let row: ExpenseRow
+    /// The trip is someone else's: only my own additions open the editor, the rest are read-only.
+    var tripReadOnly = false
+    /// The trip the expense belongs to (for opening the editor).
+    var tripId: Int64?
 
     var body: some View {
         let e = row
         let style = IconStyle.category(name: e.categoryName, icon: e.categoryIcon, color: e.categoryColor)
-        Button { model.path.append(Route.expense(e.id)) } label: {
+        Button {
+            let owner = tripId ?? (model.read { try Q.expense($0, e.id) } ?? nil)?.tripId
+            if let owner, !tripReadOnly || e.pending {
+                model.expenseEditing = ExpenseEditTarget(tripId: owner, expenseId: e.id)
+            } else {
+                model.path.append(Route.expense(e.id))
+            }
+        } label: {
             HStack(spacing: 12) {
                 IconTile(symbol: style.symbol, color: style.color, size: 42)
                 VStack(alignment: .leading, spacing: 1) {

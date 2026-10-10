@@ -123,10 +123,10 @@ struct PlanDetailView: View {
 
             if !lines.isEmpty { DetailCard(lines: lines) }
 
-            if !p.title.isBlank || !p.location.isBlank {
-                PillButton("導航", symbol: "location.fill", height: 48) {
-                    mapTarget = MapTarget(title: p.title, location: p.location, app: t.navApp)
-                }
+            // Side by side when both fit, stacked otherwise.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { actions(p, t) }
+                VStack(spacing: 10) { actions(p, t) }
             }
 
             if !p.note.isBlank {
@@ -157,7 +157,7 @@ struct PlanDetailView: View {
                 VStack(spacing: 0) {
                     ForEach(expenses) { e in
                         if e.id != expenses.first?.id { Divider().overlay(Palette.hairline).padding(.leading, 66) }
-                        ExpenseRowItem(row: e)
+                        ExpenseRowItem(row: e, tripReadOnly: t.readOnly, tripId: t.id)
                     }
                 }
                 .ledgerCard(padding: 0)
@@ -167,6 +167,17 @@ struct PlanDetailView: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 32)
         .readableWidth()
+    }
+
+    @ViewBuilder private func actions(_ p: PlanItem, _ t: Trip) -> some View {
+        if !p.title.isBlank || !p.location.isBlank {
+            PillButton("導航", symbol: "location.fill", height: 48) {
+                mapTarget = MapTarget(title: p.title, location: p.location, app: t.navApp)
+            }
+        }
+        PillButton("為這個行程記一筆", symbol: "plus", height: 48) {
+            model.expenseEditing = ExpenseEditTarget(tripId: p.tripId, planId: p.id)
+        }
     }
 }
 

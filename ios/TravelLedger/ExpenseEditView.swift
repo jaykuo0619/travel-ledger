@@ -1,0 +1,677 @@
+import LedgerCore
+import Photos
+import PhotosUI
+import SwiftUI
+import UIKit
+
+/// Which expense the editor is open for (nil expenseId = a new one, optionally for a plan item).
+struct ExpenseEditTarget: Identifiable, Hashable {
+    let tripId: Int64
+    var expenseId: Int64?
+    var planId: Int64?
+    var id: String { expenseId.map { "e\($0)" } ?? "new-\(tripId)-\(planId.map(String.init) ?? "x")" }
+}
+
+/// 記一筆 / 編輯 (ui/ExpenseScreens.kt): what it was, category, how it was paid, and a big keypad for the amount.
+struct ExpenseEditView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.textScale) private var textScale
+    let target: ExpenseEditTarget
+
+    @State private var loaded = false
+    @State private var original: Expense?
+    @State private var title = ""
+    @State private var amount = ""
+    @State private var currency = homeCurrency
+    @State private var rate = "1"
+    @State private var categoryId: Int64?
+    @State private var paymentId: Int64?
+    @State private var date = todayEpochDay()
+    @State private var minuteOfDay: Int?
+    @State private var note = ""
+    @State private var noteOpen = false
+    @State private var photos: [Photo] = []
+    @State private var currencies: [String] = [homeCurrency]
+    @State private var tripRates: [String: Double] = [:]
+    @State private var lastExpense: Expense?
+    @State private var suggestions: [TitleSuggestion] = []
+
+    @FocusState private var focus: Field?
+    @State private var keyboardUp = false
+    @State private var pickingDate = false
+    @State private var editingRate = false
+    @State private var rateDraft = ""
+    @State private var pickingCurrency = false
+    @State private var confirmDelete = false
+    @State private var photoItems: [PhotosPickerItem] = []
+    @State private var takingPhoto = false
+    @State private var processing = false
+    @State private var viewing: Int?
+
+    enum Field { case title, note }
+
+    private var amountValue: Double? { Double(amount).flatMap { $0 > 0 ? $0 : nil } }
+    private var rateValue: Double? { Double(rate).flatMap { $0 > 0 ? $0 : nil } }
+    private var homeAmount: Double? { amountValue.flatMap { a in rateValue.map { toHomeAmount(a, $0) } } }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        titleField
+                        categoryRow
+                        paymentRow
+                        noteField
+                        photoRow
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                    .padding(.bottom, 16)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                // The keypad makes room for the keyboard while a text field is being typed in.
+                if !keyboardUp {
+                    KeypadPanel(amount: amount, currency: currency, rate: rate, home: homeAmount, canSave: homeAmount != nil,
+                                currencies: currencies, keyHeight: Binding(get: { model.settings.keypadKeyHeight }, set: { model.settings.keypadKeyHeight = $0 }),
+                                onKey: { amount = applyKey(amount, $0) }, onCurrency: setCurrency,
+                                onOtherCurrency: { pickingCurrency = true },
+                                onRate: { rateDraft = rate; editingRate = true }, onSave: save)
+                        .transition(.move(edge: .bottom))
+                }
+            }
+            .background(Palette.background)
+            .navigationTitle(original == nil ? "記一筆" : "編輯")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { close() } label: { Image(systemName: "xmark") }.accessibilityLabel("關閉").disabled(processing)
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { pickingDate = true } label: {
+                        Text(fmtShortDateTime(date, minuteOfDay)).appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
+                    }
+                    if original != nil {
+                        Button { confirmDelete = true } label: { Image(systemName: "trash") }.accessibilityLabel("刪除")
+                    }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") { focus = nil }
+                }
+            }
+        }
+        .overlay(alignment: .bottom) { ToastView() }
+        .interactiveDismissDisabled()
+        .tint(Palette.primary)
+        .onAppear(perform: load)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in withAnimation(.easeOut(duration: 0.2)) { keyboardUp = true } }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in withAnimation(.easeOut(duration: 0.2)) { keyboardUp = false } }
+        .onChange(of: photoItems) { _, items in
+            guard !items.isEmpty else { return }
+            Task { await importPicked(items) }
+        }
+        .sheet(isPresented: $pickingDate) {
+            DateTimeSheet(day: date, minute: minuteOfDay) { d, m in date = d; minuteOfDay = m }
+        }
+        .sheet(isPresented: $pickingCurrency) {
+            CurrencyPickerSheet(current: currency) { setCurrency($0) }
+        }
+        .fullScreenCover(isPresented: $takingPhoto) {
+            CameraPicker { image in
+                if let image { Task { await addImage(image) } }
+            }
+            .ignoresSafeArea()
+        }
+        .fullScreenCover(item: Binding(get: { viewing.map(ViewerStart.init) }, set: { viewing = $0?.index })) { start in
+            PhotoViewer(paths: photos.map { ($0.path, $0.type) }, start: start.index)
+        }
+        .alert("1 \(currency) = ? 新台幣", isPresented: $editingRate) {
+            TextField("匯率", text: $rateDraft).keyboardType(.decimalPad)
+            Button("取消", role: .cancel) {}
+            Button("確定") { rate = rateDraft.filter { ("0" ... "9").contains($0) || $0 == "." } }
+        }
+        .alert("刪除這筆支出?", isPresented: $confirmDelete) {
+            Button("取消", role: .cancel) {}
+            Button("刪除", role: .destructive) { delete() }
+        } message: {
+            Text("照片也會一併刪除。")
+        }
+    }
+
+    // MARK: Fields
+
+    private var titleField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            FieldBox("名稱") {
+                TextField("", text: $title, prompt: Text("店家或項目名稱").foregroundStyle(Palette.textMuted))
+                    .appFont(size: 17, weight: .semibold)
+                    .focused($focus, equals: .title)
+                    .submitLabel(.done)
+            }
+            // Names used before, while the field is being typed in; picking one also brings its category.
+            if focus == .title {
+                let found = matchSuggestions(suggestions, typed: title)
+                if !found.isEmpty {
+                    FlowLayout(spacing: 8, lineSpacing: 8) {
+                        ForEach(found, id: \.title) { s in
+                            Button {
+                                title = s.title
+                                if let c = s.categoryId { categoryId = c }
+                                focus = nil
+                            } label: {
+                                Text(s.title).appFont(size: 15).lineLimit(1)
+                                    .padding(.horizontal, 12).frame(minHeight: 36)
+                                    .background(Palette.surfaceVariant, in: Capsule())
+                                    .foregroundStyle(Palette.onBackground)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var categoryRow: some View {
+        let categories = model.read { try Q.categories($0) } ?? []
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(categories) { c in
+                    let style = IconStyle.category(name: c.name, icon: c.icon, color: c.color)
+                    SelectPill(c.name, selected: categoryId == c.id) { categoryId = c.id } leading: {
+                        Image(systemName: style.symbol).font(.system(size: 14)).foregroundStyle(style.color)
+                    }
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    /// Up to three ways to pay share the width; more scroll sideways. With large text the icons go.
+    private var paymentRow: some View {
+        let methods = model.read { try Q.paymentMethods($0) } ?? []
+        let pills = ForEach(methods) { m in
+            Button { paymentId = m.id } label: {
+                HStack(spacing: 6) {
+                    if textScale < 1.1 { Image(systemName: Icons.payment(m.name)).font(.system(size: 14)) }
+                    Text(m.name).appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
+                }
+                .foregroundStyle(paymentId == m.id ? Palette.onPrimaryContainer : Palette.onBackground)
+                .padding(.horizontal, 10)
+                .frame(maxWidth: methods.count <= 3 ? .infinity : nil, minHeight: 40)
+                .background(paymentId == m.id ? Palette.primaryContainer : Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(paymentId == m.id ? Palette.primary : Palette.hairline))
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(paymentId == m.id ? .isSelected : [])
+        }
+        return Group {
+            if methods.count <= 3 {
+                HStack(spacing: 8) { pills }
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 8) { pills }.padding(.vertical, 1) }
+            }
+        }
+    }
+
+    @ViewBuilder private var noteField: some View {
+        if noteOpen {
+            FieldBox("備註") {
+                TextField("", text: $note, prompt: Text("例如:點了特製拉麵").foregroundStyle(Palette.textMuted), axis: .vertical)
+                    .appFont(size: 16)
+                    .focused($focus, equals: .note)
+            }
+        } else {
+            Button {
+                noteOpen = true
+                focus = .note
+            } label: {
+                Label("加備註", systemImage: "square.and.pencil").appFont(size: 15, weight: .semibold).frame(minHeight: 40)
+            }
+        }
+    }
+
+    private var photoRow: some View {
+        let full = photos.count >= maxExpensePhotos
+        return VStack(alignment: .leading, spacing: 8) {
+            if !photos.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(photos.indices, id: \.self) { i in
+                        Button { viewing = i } label: {
+                            LocalImage(path: photos[i].path, maxPixel: 300) { Palette.surfaceVariant }
+                                .frame(width: 88, height: 88)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("照片 \(i + 1)")
+                        .overlay(alignment: .bottomLeading) {
+                            // 收據 ↔ 回憶
+                            Button { toggleType(i) } label: {
+                                PhotoTypeBadge(type: photos[i].type).padding(5).frame(minWidth: 44, minHeight: 36, alignment: .bottomLeading)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(photos[i].type == PhotoType.receipt ? "收據,點兩下改成回憶" : "回憶,點兩下改成收據")
+                        }
+                        .overlay(alignment: .topTrailing) {
+                            Button { removePhoto(i) } label: {
+                                Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.black.opacity(0.55), in: Circle())
+                                    .frame(width: 40, height: 40, alignment: .topTrailing)
+                                    .padding(4)
+                            }
+                            .accessibilityLabel("移除照片")
+                        }
+                    }
+                }
+            }
+            HStack(spacing: 8) {
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    photoButton("拍照", "camera") { takingPhoto = true }
+                }
+                PhotosPicker(selection: $photoItems, maxSelectionCount: max(maxExpensePhotos - photos.count, 1), matching: .images) {
+                    photoLabel("相簿", "photo.on.rectangle")
+                }
+                .disabled(full || processing)
+                if processing || full {
+                    Text(processing ? "處理照片中…" : "已滿 \(maxExpensePhotos) 張").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                }
+            }
+        }
+    }
+
+    private func photoButton(_ text: String, _ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { photoLabel(text, symbol) }
+            .disabled(photos.count >= maxExpensePhotos || processing)
+    }
+
+    private func photoLabel(_ text: String, _ symbol: String) -> some View {
+        Label(text, systemImage: symbol).appFont(size: 15, weight: .semibold).lineLimit(1).fixedSize()
+            .padding(.horizontal, 12)
+            .frame(minHeight: 40)
+            .background(Palette.secondaryContainer, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // MARK: Actions
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        tripRates = Dictionary((model.read { try Q.rates($0, target.tripId) } ?? []).map { ($0.currency, $0.rate) }, uniquingKeysWith: { a, _ in a })
+        lastExpense = model.read { try Q.latestExpense($0, target.tripId) } ?? nil
+        suggestions = model.read { try Q.titleSuggestions($0) } ?? []
+        if let id = target.expenseId, let e = model.read({ try Q.expense($0, id) }) ?? nil {
+            original = e
+            title = e.title
+            amount = fmtNumber(e.amount)
+            currency = e.currency
+            rate = fmtNumber(e.rate)
+            categoryId = e.categoryId
+            paymentId = e.paymentMethodId
+            date = e.date
+            minuteOfDay = e.minuteOfDay
+            note = e.note
+            noteOpen = !e.note.isBlank
+            photos = model.read { try Q.photos($0, expenseId: id) } ?? []
+            var seen = Set<String>()
+            currencies = ([homeCurrency] + tripRates.keys.sorted() + [e.currency]).filter { seen.insert($0).inserted }
+        } else if let d = model.read({ try Q.expenseDefaults($0, tripId: target.tripId, planId: target.planId) }) {
+            title = d.title
+            currency = d.currency
+            rate = d.rate
+            categoryId = d.categoryId
+            paymentId = d.paymentId
+            currencies = d.currencies
+            let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
+            minuteOfDay = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+        }
+    }
+
+    private func setCurrency(_ code: String) {
+        currency = code
+        rate = Q.rateText(code, tripRates: tripRates, last: lastExpense)
+        if !currencies.contains(code) { currencies.append(code) }
+    }
+
+    private func importPicked(_ items: [PhotosPickerItem]) async {
+        processing = true
+        defer { processing = false; photoItems = [] }
+        for item in items.prefix(maxExpensePhotos - photos.count) {
+            guard let data = try? await item.loadTransferable(type: Data.self) else {
+                model.show("無法讀取這張照片")
+                continue
+            }
+            await store(data)
+        }
+    }
+
+    private func addImage(_ image: UIImage) async {
+        processing = true
+        defer { processing = false }
+        guard let data = image.jpegData(compressionQuality: 0.95) else { return }
+        await store(data)
+    }
+
+    /// Keeps a photo as a memory, downscaled to 1200 px (photo/PhotoProcessor.kt); the badge switches it to a receipt.
+    private func store(_ data: Data) async {
+        guard photos.count < maxExpensePhotos,
+              let jpeg = await Task.detached(operation: { downscaledJPEG(data, maxEdge: 1200, quality: 0.82) }).value,
+              let path = try? model.files.write(jpeg, folder: "photos/memories")
+        else {
+            model.show("無法讀取這張照片")
+            return
+        }
+        let size = UIImage(data: jpeg)?.size ?? .zero
+        photos.append(Photo(expenseId: original?.id ?? 0, type: PhotoType.memory, path: path, width: Int(size.width), height: Int(size.height)))
+    }
+
+    private func toggleType(_ i: Int) {
+        guard photos.indices.contains(i) else { return }
+        photos[i].type = photos[i].type == PhotoType.receipt ? PhotoType.memory : PhotoType.receipt
+    }
+
+    private func removePhoto(_ i: Int) {
+        guard photos.indices.contains(i) else { return }
+        let p = photos.remove(at: i)
+        if p.id == nil { model.files.delete(p.path) } // saved photos are removed on save
+    }
+
+    /// Leaving without saving: photos added this time are thrown away.
+    private func close() {
+        photos.filter { $0.id == nil }.forEach { model.files.delete($0.path) }
+        dismiss()
+    }
+
+    private func save() {
+        guard let a = amountValue, let r = rateValue, let home = homeAmount else { return }
+        var e = original ?? Expense(tripId: target.tripId, date: date, amount: a, currency: currency, rate: r, homeAmount: home)
+        e.date = date
+        e.minuteOfDay = minuteOfDay
+        e.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        e.amount = a
+        e.currency = currency
+        e.rate = r
+        e.homeAmount = home
+        e.categoryId = categoryId
+        e.paymentMethodId = paymentId
+        e.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if original == nil { e.planItemId = target.planId }
+
+        // New memory photos also go to the photo library when the setting says so.
+        let toLibrary = model.settings.saveMemoriesToGallery
+        var toSave = photos
+        var libraryFiles: [URL] = []
+        for i in toSave.indices where toSave[i].id == nil && toSave[i].type == PhotoType.memory && toLibrary {
+            toSave[i].savedToGallery = true
+            libraryFiles.append(model.files.url(toSave[i].path))
+        }
+        var removed: [String] = []
+        if model.write({ removed = try Q.saveExpense($0, e, photos: toSave).removed }) {
+            model.files.delete(removed)
+            libraryFiles.forEach(saveToPhotoLibrary)
+            dismiss()
+        } else {
+            model.show("儲存失敗")
+        }
+    }
+
+    private func delete() {
+        guard let id = original?.id else { return }
+        var paths: [String] = []
+        if model.write({ paths = try Q.deleteExpense($0, id) }) {
+            model.files.delete(paths)
+            photos.filter { $0.id == nil }.forEach { model.files.delete($0.path) }
+            dismiss()
+        }
+    }
+}
+
+/// Adds a picture file to the photo library (asks for add-only access the first time).
+func saveToPhotoLibrary(_ file: URL) {
+    PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+        guard status == .authorized || status == .limited else { return }
+        PHPhotoLibrary.shared().performChanges {
+            PHAssetCreationRequest.forAsset().addResource(with: .photo, fileURL: file, options: nil)
+        }
+    }
+}
+
+/// The system camera, for one picture.
+struct CameraPicker: UIViewControllerRepresentable {
+    @Environment(\.dismiss) private var dismiss
+    let onDone: (UIImage?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: CameraPicker
+        init(_ parent: CameraPicker) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            parent.onDone(info[.originalImage] as? UIImage)
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.onDone(nil)
+            parent.dismiss()
+        }
+    }
+}
+
+// MARK: - Keypad
+
+/// The calculator at the bottom (ui/Keypad.kt): currency and amount, the rate line, digits and 儲存.
+/// Drag the handle to make the keys taller or shorter; the height is remembered.
+private struct KeypadPanel: View {
+    let amount: String
+    let currency: String
+    let rate: String
+    let home: Double?
+    let canSave: Bool
+    let currencies: [String]
+    @Binding var keyHeight: Double
+    let onKey: (String) -> Void
+    let onCurrency: (String) -> Void
+    let onOtherCurrency: () -> Void
+    let onRate: () -> Void
+    let onSave: () -> Void
+    @State private var dragStart: Double?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Capsule().fill(Palette.outline).frame(width: 40, height: 5)
+                .frame(maxWidth: .infinity, minHeight: 22)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture()
+                        .onChanged { v in
+                            let start = dragStart ?? keyHeight
+                            dragStart = start
+                            keyHeight = min(max(start - v.translation.height / 4, 40), 80)
+                        }
+                        .onEnded { _ in dragStart = nil }
+                )
+                .accessibilityLabel("調整按鍵高度")
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Menu {
+                    ForEach(currencies, id: \.self) { c in
+                        Button { onCurrency(c) } label: {
+                            if c == currency { Label("\(c) \(currencyNames[c] ?? "")", systemImage: "checkmark") } else { Text("\(c) \(currencyNames[c] ?? "")") }
+                        }
+                    }
+                    Divider()
+                    Button("其他幣別…", action: onOtherCurrency)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(currency).appFont(size: 17, weight: .bold)
+                        Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold))
+                    }
+                    .padding(.horizontal, 12).frame(minHeight: 44)
+                    .background(Palette.primaryContainer, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .foregroundStyle(Palette.onPrimaryContainer)
+                }
+                Text(amount.isEmpty ? "0" : fmtTyped(amount))
+                    .font(.system(size: 38, weight: .bold)).tnum()
+                    .foregroundStyle(amount.isEmpty ? Palette.textMuted : Palette.onBackground)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .accessibilityLabel("金額 \(amount.isEmpty ? "0" : amount)")
+            }
+
+            rateLine
+
+            // Three columns of digits; the fourth has ⌫, C and a 儲存 two keys tall.
+            GeometryReader { geo in
+                let gap: CGFloat = 8
+                let w = (geo.size.width - gap * 3) / 4
+                HStack(alignment: .top, spacing: gap) {
+                    Grid(horizontalSpacing: gap, verticalSpacing: gap) {
+                        GridRow { key("7"); key("8"); key("9") }
+                        GridRow { key("4"); key("5"); key("6") }
+                        GridRow { key("1"); key("2"); key("3") }
+                        GridRow { key("00"); key("0"); key(".") }
+                    }
+                    .frame(width: w * 3 + gap * 2)
+                    VStack(spacing: gap) {
+                        backspace
+                        key("C")
+                        Button(action: onSave) {
+                            Text("儲存").appFont(size: 17, weight: .bold).lineLimit(1).minimumScaleFactor(0.7)
+                                .frame(maxWidth: .infinity, minHeight: keyHeight * 2 + gap)
+                                .foregroundStyle(canSave ? Palette.onPrimary : Palette.onSurfaceVariant)
+                                .background(canSave ? Palette.primary : Palette.surfaceVariant, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canSave)
+                    }
+                    .frame(width: w)
+                }
+            }
+            .frame(height: keyHeight * 4 + 8 * 3)
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .background(Palette.card.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) { Divider().overlay(Palette.hairline) }
+    }
+
+    @ViewBuilder private var rateLine: some View {
+        HStack(spacing: 6) {
+            if currency == homeCurrency {
+                Text("新台幣").appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
+                Spacer(minLength: 0)
+            } else {
+                Button(action: onRate) {
+                    HStack(spacing: 4) {
+                        if rate.isEmpty || Double(rate) == nil || (Double(rate) ?? 0) <= 0 {
+                            Text("請設定匯率").appFont(size: 15, weight: .semibold).foregroundStyle(Palette.danger)
+                        } else {
+                            Text("匯率 \(rate)").appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
+                        }
+                        Image(systemName: "pencil").font(.system(size: 13, weight: .semibold))
+                    }
+                    .frame(minHeight: 36)
+                }
+                Spacer(minLength: 8)
+                if let home { Text("≈ \(fmtMoney(home))").appFont(size: 15, weight: .semibold).tnum().lineLimit(1) }
+            }
+        }
+        .frame(minHeight: 36)
+    }
+
+    private func key(_ k: String) -> some View {
+        Button { onKey(k) } label: {
+            Text(k).font(.system(size: 24, weight: .semibold)).tnum()
+                .frame(maxWidth: .infinity, minHeight: keyHeight)
+                .foregroundStyle(k == "C" ? Palette.danger : Palette.onBackground)
+                .background(Palette.field, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(k == "C" ? "清除" : k)
+    }
+
+    /// ⌫ deletes one digit; holding it clears.
+    private var backspace: some View {
+        Image(systemName: "delete.left").font(.system(size: 22, weight: .semibold))
+            .frame(maxWidth: .infinity, minHeight: keyHeight)
+            .foregroundStyle(Palette.onBackground)
+            .background(Palette.field, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(Rectangle())
+            .onTapGesture { onKey("⌫") }
+            .onLongPressGesture { onKey("C") }
+            .accessibilityLabel("刪除一位")
+            .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// Date first (「下一步:時間」), then a 24-hour time: 「確定」 or 「不記時間」.
+private struct DateTimeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let day: Int64
+    let minute: Int?
+    let onPick: (Int64, Int?) -> Void
+    @State private var date = Date()
+    @State private var time = Date()
+    @State private var onTime = false
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if onTime {
+                    DatePicker("時間", selection: $time, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.wheel).labelsHidden()
+                        .environment(\.locale, Locale(identifier: "en_GB"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    DatePicker("日期", selection: $date, displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                        .environment(\.locale, Locale(identifier: "zh_TW"))
+                        .padding(.horizontal, 12)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                }
+            }
+            .navigationTitle(onTime ? "時間" : "日期")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if onTime {
+                        Button("不記時間") { onPick(CivilDate.today(date).epochDay, nil); dismiss() }
+                    } else {
+                        Button("取消") { dismiss() }
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if onTime {
+                        Button("確定") {
+                            let c = Calendar.current.dateComponents([.hour, .minute], from: time)
+                            onPick(CivilDate.today(date).epochDay, (c.hour ?? 0) * 60 + (c.minute ?? 0))
+                            dismiss()
+                        }
+                    } else {
+                        Button("下一步:時間") { onTime = true }
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .tint(Palette.primary)
+        .onAppear {
+            date = day.civil.date()
+            let m = minute ?? 12 * 60
+            time = Calendar.current.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: Date()) ?? Date()
+        }
+    }
+}

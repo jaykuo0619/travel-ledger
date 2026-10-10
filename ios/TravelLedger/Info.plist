@@ -26,6 +26,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>拍下收據或旅途中的照片,附在這筆支出上。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>把回憶照片存一份到你的相簿。</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<!-- 「用卡溜趴開啟」: .zip files from LINE, Files and AirDrop. The system copies the file in for us. -->
