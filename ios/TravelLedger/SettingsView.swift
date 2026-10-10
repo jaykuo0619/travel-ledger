@@ -58,6 +58,15 @@ struct SettingsView: View {
                 }
                 .ledgerCard(padding: 0)
 
+                SectionHeader("說明")
+                SettingRow(symbol: "hand.tap", color: Palette.category(2), title: "重看教學",
+                           subtitle: "再走一次旅程列表、新增旅程和旅程頁的操作教學") {
+                    CoachTour.reset()
+                    model.showSettings = false
+                    model.closeTrip()
+                }
+                .ledgerCard(padding: 0)
+
                 SectionHeader("關於")
                 VStack(spacing: 0) {
                     SettingRow(symbol: "dollarsign.arrow.circlepath", color: Palette.category(6), title: "結算幣別", subtitle: "新台幣(TWD)", action: nil)

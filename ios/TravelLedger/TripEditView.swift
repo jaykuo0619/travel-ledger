@@ -36,11 +36,20 @@ struct TripEditView: View {
 
     enum DayField: String, Identifiable { case start, end; var id: String { rawValue } }
 
+    /// The first-run tutorial for a new trip.
+    static let tourSteps = [
+        CoachStep(target: .editCover, title: "封面", text: "每趟旅程有一張封面。可以用下面的插畫,或按「從相簿選封面」換成自己的照片。"),
+        CoachStep(target: .editName, title: "旅程名稱", text: "幫這趟旅行取個名字,例如「首爾賞楓」。這一欄一定要填。"),
+        CoachStep(target: .editDates, title: "出發與回程", text: "點日期選出發日和回程日。改出發日時,天數會保持不變。"),
+        CoachStep(target: .editMembers, title: "同行成員", text: "把一起旅行的人加進來,帳本會算每個人平均花多少。"),
+        CoachStep(title: "匯率、預算與儲存", text: "往下滑還有導航軟體、外幣匯率(1 外幣等於多少新台幣)和預算。填好後按右上角的 ✓ 儲存,旅程就建立了。"),
+    ]
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    coverBox
+                    coverBox.coachTarget(.editCover)
                     if cover == nil {
                         CoverThemePicker(name: name, start: start, selected: theme) { theme = $0 }
                     } else {
@@ -55,17 +64,19 @@ struct TripEditView: View {
                             .lineLimit(1 ... 2)
                             .appFont(size: 16)
                     }
+                    .coachTarget(.editName)
 
                     HStack(spacing: 10) {
                         dateBox("出發", start) { picking = .start }
                         dateBox("回程", end) { picking = .end }
                     }
                     .fixedSize(horizontal: false, vertical: true)
+                    .coachTarget(.editDates)
                     Text(verbatim: "\(start.civil.year) 年 · 共 \(end - start + 1) 天")
                         .appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant).padding(.leading, 4)
 
                     SectionHeader("旅行成員 · \(members.count) 人")
-                    membersGrid
+                    membersGrid.coachTarget(.editMembers)
 
                     SectionHeader("導航軟體")
                     FlowLayout(spacing: 8, lineSpacing: 8) {
@@ -113,6 +124,7 @@ struct TripEditView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Palette.background)
+            .coachTour(.edit, steps: Self.tourSteps, active: tripId == nil, advanceOn: 0)
             .navigationTitle(tripId == nil ? "新增旅程" : "編輯旅程")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

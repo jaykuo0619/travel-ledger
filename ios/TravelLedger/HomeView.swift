@@ -22,6 +22,7 @@ struct HomeView: View {
                 header(showAdd: sidebar || activeCount > 0)
                 if activeCount == 0, !sidebar {
                     PillButton("新增旅程", symbol: "plus", height: 50) { model.editing = EditTarget(tripId: nil) }
+                        .coachTarget(.addTrip)
                 }
                 if !trips.isEmpty {
                     FilterTabs(selected: current, counts: [
@@ -44,6 +45,7 @@ struct HomeView: View {
                     }
                     .buttonStyle(PressStyle())
                     .tripActions(t, deleting: $deleting)
+                    .modifier(FirstTripTarget(on: t.id == shown.first?.id))
                 }
             }
             .padding(.horizontal, sidebar ? 12 : 16)
@@ -53,6 +55,22 @@ struct HomeView: View {
         .background(Palette.background)
         .toolbar(.hidden, for: .navigationBar)
         .deleteTripAlert($deleting)
+        // On an iPad the tutorial covers the whole window, so RootView shows it instead of the sidebar.
+        .coachTour(.home, steps: Self.tourSteps(hasTrips: !trips.isEmpty), active: !sidebar, advanceOn: model.editing != nil)
+    }
+
+    /// The first-run tutorial for the trip list.
+    static func tourSteps(hasTrips: Bool) -> [CoachStep] {
+        var steps = [
+            CoachStep(title: "歡迎使用卡溜趴", text: "旅行的行程和花費都記在這裡。花一分鐘看看怎麼用,隨時可以按「跳過教學」。"),
+            CoachStep(target: .addTrip, title: "建立旅程", text: "每一趟旅行是一個「旅程」。點這裡新增,填名稱、日期、同行成員和外幣匯率。", tappable: true),
+            CoachStep(target: .settings, title: "設定與匯入", text: "這裡可以調字體大小和深淺色、填「我的名字」,也可以從檔案匯入同伴分享的旅程或還原備份。"),
+            CoachStep(title: "打開同伴傳來的檔案", text: "同伴用 LINE 傳來的 .zip 檔:在 LINE 點那個檔案 → 分享或「用其他應用程式開啟」→ 選「卡溜趴」,確認後就會出現在旅程列表。匯入的旅程只能看;對方再分享一次,打開新檔案就會更新。"),
+        ]
+        if hasTrips {
+            steps.append(CoachStep(target: .tripList, title: "打開一趟旅程", text: "點旅程卡片就能看它的行程和帳本。上面的分頁可以切換進行中、已結束或全部旅程。"))
+        }
+        return steps
     }
 
     private func header(showAdd: Bool) -> some View {
@@ -76,14 +94,24 @@ struct HomeView: View {
                         .background(Palette.secondaryContainer, in: Circle())
                 }
                 .accessibilityLabel("新增旅程")
+                .coachTarget(.addTrip)
             }
             Button { model.openSettings() } label: {
                 Image(systemName: "gearshape").font(.system(size: 20)).frame(width: 44, height: 44)
             }
             .foregroundStyle(Palette.onBackground)
             .accessibilityLabel("設定")
+            .coachTarget(.settings)
         }
         .padding(.vertical, 10)
+    }
+}
+
+/// The first trip in the list is what the tutorial points at.
+private struct FirstTripTarget: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        if on { content.coachTarget(.tripList) } else { content }
     }
 }
 

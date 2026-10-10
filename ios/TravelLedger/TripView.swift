@@ -22,6 +22,7 @@ struct TripView: View {
     let tripId: Int64
     @State private var tab: ShownTab?
     @State private var confirmDelete = false
+    @AppStorage(CoachTour.home.rawValue) private var homeTourDone = false
 
     var body: some View {
         let today = todayEpochDay()
@@ -52,12 +53,14 @@ struct TripView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        TabBar(current: current) { tab = $0 }
+                        TabBar(current: current) { tab = $0 }.coachTarget(.tripTabs)
                     }
                 }
             }
             .background(Palette.background)
             .toolbar(.hidden, for: .navigationBar)
+            // On an iPad the trip list's tutorial comes first; this one follows it.
+            .coachTour(.trip, steps: tourSteps(trip), active: !model.wide || homeTourDone, advanceOn: 0)
             .alert("刪除這趟旅程?", isPresented: $confirmDelete) {
                 Button("取消", role: .cancel) {}
                 Button("刪除", role: .destructive) {
@@ -70,6 +73,19 @@ struct TripView: View {
         } else {
             Color.clear.background(Palette.background)
         }
+    }
+
+    /// The first-run tutorial for a trip.
+    private func tourSteps(_ trip: Trip) -> [CoachStep] {
+        [
+            CoachStep(target: .tripTitle, title: "這趟旅程",
+                      text: model.wide ? "這裡是旅程名稱、狀態和日期。左邊的列表可以直接切換到別趟旅程。" : "這裡是旅程名稱、狀態和日期。點它或左邊的箭頭,回到旅程列表。"),
+            CoachStep(target: .tripTabs, title: "行程與帳本",
+                      text: "「行程」是每天的安排和還沒排日期的「待排」;「帳本」是總花費、分類和每一筆明細。寬螢幕會左右並排,其餘用下方的分頁切換。"),
+            CoachStep(target: .planGrouping, title: "依天或依類型", text: "行程可以照日期排,也可以照吃、交通、景點等類型分組。點一個行程或一筆支出,看它的詳細內容。"),
+            CoachStep(target: .tripMenu, title: "更多功能",
+                      text: trip.readOnly ? "這趟是同伴分享的,只能看、不能改。這裡可以回到所有旅程,或刪除你手機上的這份副本。" : "這裡可以編輯旅程(名稱、日期、成員、匯率)、回到所有旅程,或刪除旅程。"),
+        ]
     }
 
     /// One of the two side-by-side columns on an iPad, under a small title.
@@ -107,6 +123,7 @@ struct TripView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
+            .coachTarget(.tripTitle)
             Menu {
                 if !trip.readOnly {
                     Button { model.editing = EditTarget(tripId: tripId) } label: { Label("編輯旅程", systemImage: "pencil") }
@@ -118,6 +135,7 @@ struct TripView: View {
                     .frame(width: 44, height: 44)
             }
             .accessibilityLabel("更多")
+            .coachTarget(.tripMenu)
         }
         .foregroundStyle(Palette.onBackground)
         .padding(.leading, model.wide ? 16 : 6)
@@ -222,7 +240,7 @@ private struct PlanTab: View {
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
-                Segmented(options: ["依天", "依類型"], selected: byType ? 1 : 0) { byType = $0 == 1 }
+                Segmented(options: ["依天", "依類型"], selected: byType ? 1 : 0) { byType = $0 == 1 }.coachTarget(.planGrouping)
                 if plans.isEmpty, notes.isEmpty {
                     EmptyState(symbol: "map", title: trip.readOnly ? "對方還沒有安排行程" : "還沒有行程",
                                message: trip.readOnly ? "等對方排好再分享一次就看得到。" : "新增行程的功能下一版就來;電腦排好的行程檔現在就能匯入。")

@@ -51,6 +51,8 @@ struct RootView: View {
                     }
                 }
                 .background(Palette.background)
+                .coachTour(.home, steps: HomeView.tourSteps(hasTrips: model.read { try Q.tripSummaries($0) }?.isEmpty == false),
+                           advanceOn: model.editing != nil)
             } else {
                 NavigationStack(path: $model.path) {
                     HomeView()
