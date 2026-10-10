@@ -1,0 +1,19 @@
+# Build output
+.build/
+build/
+DerivedData/
+*.xcresult
+
+# Per-user Xcode state
+xcuserdata/
+*.xcuserstate
+.swiftpm/xcode/xcuserdata/
+
+# Never commit signing material or secrets
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.p8
+AuthKey_*.p8
+*.keychain

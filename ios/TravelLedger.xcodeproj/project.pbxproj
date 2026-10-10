@@ -1,0 +1,391 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0E61A07E9DF82DC1CD3966B6 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E30BC7DB443E7B252E1C9D2 /* HomeView.swift */; };
+		31D8E6F518DC5DEDF6D7B2DB /* ImportHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7811E30E80E6DE826D699803 /* ImportHost.swift */; };
+		5DF9186FC18BF222B61CCA12 /* LedgerCore in Frameworks */ = {isa = PBXBuildFile; productRef = 11897F98E8AE378F8F874E9D /* LedgerCore */; };
+		67AB885B41B601C4DE3098DC /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 132AC0B2194695D36F63222F /* App.swift */; };
+		75908DA6BA3B68B2B93A3A4C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FFE280C84A4988A2519490FB /* Assets.xcassets */; };
+		7EAED0856E5FD49B8669C847 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5773333C2782021D4B5EB2DA /* AppModel.swift */; };
+		89BBFE675E51EF9858419575 /* Details.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D4A1A26869DDC09E1F0048F /* Details.swift */; };
+		C6B1A7B7E9F209889F7C33BA /* TripEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91EDFA6F2072F264ABBB417C /* TripEditView.swift */; };
+		D7CC34A5497E9AE669C6BFD2 /* CoverArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = F322B027FBB5CFBE36AFD313 /* CoverArtwork.swift */; };
+		E067AB4660DFABEFB620C012 /* TripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7DB8436E01F2A1B58DB93FD /* TripView.swift */; };
+		F2CA96C9ADB308148E33D93C /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAB21CFEAD8DA29627A701A4 /* Components.swift */; };
+		F4332DF6C2F3352D846B72FD /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E2CF77F0B92DA49656ACD4 /* Theme.swift */; };
+		F82AA9E84B8F94893FAAA1C8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54101FF59253EFF01F65140E /* SettingsView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0D4A1A26869DDC09E1F0048F /* Details.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Details.swift; sourceTree = "<group>"; };
+		132AC0B2194695D36F63222F /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		54101FF59253EFF01F65140E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		5773333C2782021D4B5EB2DA /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		58E2CF77F0B92DA49656ACD4 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		72564F44E950A8F67BC56788 /* TravelLedger.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TravelLedger.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7811E30E80E6DE826D699803 /* ImportHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportHost.swift; sourceTree = "<group>"; };
+		7963303FBD5B514D09065E7F /* LedgerCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LedgerCore; path = LedgerCore; sourceTree = SOURCE_ROOT; };
+		8E30BC7DB443E7B252E1C9D2 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		91EDFA6F2072F264ABBB417C /* TripEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripEditView.swift; sourceTree = "<group>"; };
+		97B1E6995AD0D1AF771C31A7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		BAB21CFEAD8DA29627A701A4 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		F322B027FBB5CFBE36AFD313 /* CoverArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverArtwork.swift; sourceTree = "<group>"; };
+		F7DB8436E01F2A1B58DB93FD /* TripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripView.swift; sourceTree = "<group>"; };
+		FFE280C84A4988A2519490FB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E1F6D18153C182FBCF13D8E0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5DF9186FC18BF222B61CCA12 /* LedgerCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		18BF17D6E52C8ECD841C9C39 = {
+			isa = PBXGroup;
+			children = (
+				CEE3AC8050AEB3CDB275D621 /* Packages */,
+				8D7D8B294D632AE8315D1584 /* TravelLedger */,
+				C45C5A8CF80795460A46416B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8D7D8B294D632AE8315D1584 /* TravelLedger */ = {
+			isa = PBXGroup;
+			children = (
+				132AC0B2194695D36F63222F /* App.swift */,
+				5773333C2782021D4B5EB2DA /* AppModel.swift */,
+				FFE280C84A4988A2519490FB /* Assets.xcassets */,
+				BAB21CFEAD8DA29627A701A4 /* Components.swift */,
+				F322B027FBB5CFBE36AFD313 /* CoverArtwork.swift */,
+				0D4A1A26869DDC09E1F0048F /* Details.swift */,
+				8E30BC7DB443E7B252E1C9D2 /* HomeView.swift */,
+				7811E30E80E6DE826D699803 /* ImportHost.swift */,
+				97B1E6995AD0D1AF771C31A7 /* Info.plist */,
+				54101FF59253EFF01F65140E /* SettingsView.swift */,
+				58E2CF77F0B92DA49656ACD4 /* Theme.swift */,
+				91EDFA6F2072F264ABBB417C /* TripEditView.swift */,
+				F7DB8436E01F2A1B58DB93FD /* TripView.swift */,
+			);
+			path = TravelLedger;
+			sourceTree = "<group>";
+		};
+		C45C5A8CF80795460A46416B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				72564F44E950A8F67BC56788 /* TravelLedger.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CEE3AC8050AEB3CDB275D621 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				7963303FBD5B514D09065E7F /* LedgerCore */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0D42F147E987E8D5F96CCF93 /* TravelLedger */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B59DB7AF78F4E2A1BAA5077C /* Build configuration list for PBXNativeTarget "TravelLedger" */;
+			buildPhases = (
+				987E022A4DAB93064976FA14 /* Sources */,
+				9F7CB9190B9ACF08D7E15387 /* Resources */,
+				E1F6D18153C182FBCF13D8E0 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TravelLedger;
+			packageProductDependencies = (
+				11897F98E8AE378F8F874E9D /* LedgerCore */,
+			);
+			productName = TravelLedger;
+			productReference = 72564F44E950A8F67BC56788 /* TravelLedger.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B63E5B618C8805B516AC9C70 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					0D42F147E987E8D5F96CCF93 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = DFB1620AA9879C68E087EC7E /* Build configuration list for PBXProject "TravelLedger" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = "zh-Hant";
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				"zh-Hant",
+			);
+			mainGroup = 18BF17D6E52C8ECD841C9C39;
+			packageReferences = (
+				4DAF409991B4A1C22AE055BE /* XCLocalSwiftPackageReference "LedgerCore" */,
+			);
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0D42F147E987E8D5F96CCF93 /* TravelLedger */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		9F7CB9190B9ACF08D7E15387 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				75908DA6BA3B68B2B93A3A4C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		987E022A4DAB93064976FA14 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				67AB885B41B601C4DE3098DC /* App.swift in Sources */,
+				7EAED0856E5FD49B8669C847 /* AppModel.swift in Sources */,
+				F2CA96C9ADB308148E33D93C /* Components.swift in Sources */,
+				D7CC34A5497E9AE669C6BFD2 /* CoverArtwork.swift in Sources */,
+				89BBFE675E51EF9858419575 /* Details.swift in Sources */,
+				0E61A07E9DF82DC1CD3966B6 /* HomeView.swift in Sources */,
+				31D8E6F518DC5DEDF6D7B2DB /* ImportHost.swift in Sources */,
+				F82AA9E84B8F94893FAAA1C8 /* SettingsView.swift in Sources */,
+				F4332DF6C2F3352D846B72FD /* Theme.swift in Sources */,
+				C6B1A7B7E9F209889F7C33BA /* TripEditView.swift in Sources */,
+				E067AB4660DFABEFB620C012 /* TripView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		5E9514E027D418C9F4FA53E7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = TravelLedger/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.archiekuo.travelledger;
+				PRODUCT_NAME = TravelLedger;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		668EA4385D961952332306BB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = TravelLedger/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.archiekuo.travelledger;
+				PRODUCT_NAME = TravelLedger;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		89688EDD9868D50CEA819C86 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		91688293901286178C6A398F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B59DB7AF78F4E2A1BAA5077C /* Build configuration list for PBXNativeTarget "TravelLedger" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E9514E027D418C9F4FA53E7 /* Debug */,
+				668EA4385D961952332306BB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DFB1620AA9879C68E087EC7E /* Build configuration list for PBXProject "TravelLedger" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				89688EDD9868D50CEA819C86 /* Debug */,
+				91688293901286178C6A398F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		4DAF409991B4A1C22AE055BE /* XCLocalSwiftPackageReference "LedgerCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LedgerCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		11897F98E8AE378F8F874E9D /* LedgerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LedgerCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = B63E5B618C8805B516AC9C70 /* Project object */;
+}
