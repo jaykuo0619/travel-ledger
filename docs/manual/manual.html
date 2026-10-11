@@ -117,7 +117,7 @@
   <div class="sub">使用說明書</div>
   <p class="tagline">出國旅遊的記帳與行程規劃 App。記一筆只要三步,收據拍照自動辨識,出發前做的功課也能一起帶著走。</p>
   <div class="meta">
-    <div>適用版本 v0.10.5<br>文件日期 2026 年 10 月 10 日<br>Android 10 以上</div>
+    <div>適用版本 v0.10.6<br>文件日期 2026 年 10 月 10 日<br>Android 10 以上</div>
     <div style="text-align:right"><div style="font-size:10pt;color:var(--muted)">作者</div><span class="sign">ArchieKUO</span></div>
   </div>
 </section>
@@ -510,6 +510,12 @@
     <li>記帳人<b>再分享一次</b>給大家。同伴打開後,被加入的項目變成正式的(不會重複),沒被加入的仍留在同伴手機上當「我的補充」。</li>
   </ol>
   <p>沒有人補充時,一切跟原本一樣:不會多出任何檔案或步驟。同一個補充檔打開兩次,也不會重複加入。</p>
+  <div class="warn"><b>常見的傳錯檔案</b>
+    <ul>
+      <li><b>要給大家的是手機「分享給同伴」的檔</b>(打開時標題是「某某 分享的旅程」)。電腦行程桌「傳到手機」的檔是給記帳人<b>自己的手機</b>用的。萬一同伴打開了電腦的檔,手機會問「<b>這趟旅程是誰記帳?</b>」:選「別人記帳」並填記帳人的名字,就會變成唯讀副本,之後一樣可以「傳給記帳人」。</li>
+      <li><b>同伴要按「傳給記帳人」,不是「分享給同伴」</b>。如果同伴把整趟旅程傳回來,記帳人打開時,卡溜趴會列出<b>對方有、你沒有的項目</b>讓你勾選加入,你原本的內容不會被改動。如果顯示「沒有新的項目」,代表對方的補充不在那個檔裡,請他改按「傳給記帳人」。</li>
+    </ul>
+  </div>
   <div class="phones two">
     <figure class="phone"><img src="../../app/src/test/snapshots/images/com.archiekuo.travelledger.snap_ScreenSnapshots_sendAdditions.png"><figcaption>同伴:傳給記帳人</figcaption></figure>
     <figure class="phone"><img src="../../app/src/test/snapshots/images/com.archiekuo.travelledger.snap_ScreenSnapshots_reviewAdditions.png"><figcaption>記帳人:勾選要加入的</figcaption></figure>
@@ -624,6 +630,7 @@
   <h3>版本紀錄</h3>
   <table>
     <tr><th style="width:22mm">版本</th><th>內容</th></tr>
+    <tr><td>v0.10.6</td><td>手機打開電腦行程檔、手機上還沒有這趟旅程時,會問「這趟旅程是誰記帳?」,選「別人記帳」就變成唯讀副本(可以傳給記帳人)。記帳人收到同伴傳回的整趟旅程時,會列出對方新增的項目讓你勾選加入,不再只說「不需要匯入」。電腦行程桌 v1.4:「傳到手機」提醒這個檔只給記帳人自己的手機。</td></tr>
     <tr><td>v0.10.5</td><td>新增行程沒填名稱就按 ✓ 時,會把名稱欄標成紅框、提示「請輸入名稱才能儲存」並跳到名稱欄,不再沒有反應。</td></tr>
     <tr><td>v0.10.4</td><td>記一筆的計算機可以加減乘除:5 排按鍵,上方顯示算式、即時算出結果,不按「=」也能直接儲存。</td></tr>
     <tr><td>v0.10.3</td><td>基礎分類與付款方式不能刪除(可改名),自己新增的可刪除且會先告訴你影響幾筆;刪除分類時行程也改成「其他」。備份檔還原後不再刪除,新增「匯入後刪除原檔」開關。行程截圖「存到相簿」真的會存。「拍照」存原始高畫質到相簿;從相簿選的照片不再重複存一份。移除成員時,他付過的支出改為沒有付款人。</td></tr>

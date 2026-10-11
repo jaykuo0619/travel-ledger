@@ -28,6 +28,8 @@ PLAYWRIGHT_DIR=/opt/node-tools/node_modules node desktop/test/e2e.mjs   # 桌面
 | `ui/DeleteSourceTest` | 匯入後刪除原檔:允許刪除的來源會刪掉,像 LINE 不允許的來源保留且不出錯 |
 | `data/LedgerFlowTest`(v0.10.3)| 基礎分類/付款方式不能刪、改名後仍受保護;自己新增的刪除後支出與行程改到「其他」(即使已改名);移除成員清掉付款人;只有相機拍的回憶照片存進相簿(相簿選的與收據不存) |
 | `ui/LogicTest`(計算機) | 先乘除後加減、同級由左到右、四捨五入兩位、除以 0、運算符號替換、每個數字各自的小數點與位數限制、「=」收成數字、顯示格式;`LedgerFlowTest` 算式存成結果、≤ 0 不能存 |
+| `backup/SharingMixupsTest` | 電腦行程檔到同伴手機選「別人記帳」→ 唯讀副本 → 補充傳給記帳人;選自己 → 自己的旅程;記帳人收到自己旅程的檔 → 列出對方新增的項目並加入(原本內容不變、不重複);同伴再分享唯讀副本時沒有新項目 |
+| `ui/PlansImportDialogTest` | 電腦行程檔對話框:問誰記帳、選別人時名字必填、手機已有旅程時不問 |
 | `ui/ImageSharpnessTest` | 同一張圖先以縮圖載入,再以全螢幕載入時拿到的是原尺寸(不是縮圖);長截圖以短邊決定縮小倍數 |
 | `logic/LinksTest` | 網址與電話偵測(不把日期、金額當電話) |
 | `ui/PasteDialogTest` | 貼上多筆對話框 |

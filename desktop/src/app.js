@@ -1,7 +1,7 @@
 // 卡溜趴行程桌 — plan trips on a computer, then send them to the phone as a file.
 // Everything stays in this browser (IndexedDB); files move between the computer and the phone through LINE or similar.
 (() => {
-  const APP_VERSION = "1.3";
+  const APP_VERSION = "1.4";
   const FORMAT = "travelledger";
   const DEFAULT_CATEGORIES = ["吃", "交通", "購物", "住宿", "景點", "其他"];
   const CATEGORY_LOOK = {
@@ -576,6 +576,7 @@
       <ol><li>打開 <b>LINE 電腦版</b>,把剛下載的檔案傳給自己(或傳到 Keep)。</li>
       <li>在手機的 LINE 點這個檔案 →「用其他應用程式開啟」→ 選<b>卡溜趴</b>。</li>
       <li>確認後按「<b>併入</b>」。同一個行程會更新,不會重複;帳目不受影響。</li></ol>
+      <p class="warn-note">⚠ 這個檔案是給<b>記帳人自己的手機</b>。要給同伴看,請在記帳人的手機上打開旅程 → 右上角 ⋮ →「<b>分享給同伴</b>」傳到群組;同伴有補充時,在旅程上方按「傳給記帳人」。</p>
       <div class="actions"><button class="btn primary" id="ok">知道了</button></div>`, (root, close) => { $("#ok", root).onclick = close; });
   }
 

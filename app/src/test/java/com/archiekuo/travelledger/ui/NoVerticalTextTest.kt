@@ -212,6 +212,15 @@ class NoVerticalTextDialogTest {
             false, {}, {},
         )
     }
+    @Test fun ownTripBackDialog() = dialog("傳回的旅程") {
+        ReviewAdditionsDialog(
+            TripArchive.Additions("u", name, "小美", listOf(TripArchive.AdditionItem("b", true, "機票", "10/11 · TWD 12,000 · 交通"))),
+            false, {}, {}, ownTripBack = true,
+        )
+    }
+    @Test fun plansImportDialog() = dialog("電腦排的行程") {
+        PlansImportDialog(TripArchive.PlansPreview(name, newTrip = true, added = 12, updated = 0, deleted = 0), false, {}, {})
+    }
     @Test fun splitDialog() = dialog("拆成多個行程") {
         SplitNoteDialog(
             com.archiekuo.travelledger.data.PlanItem(1, 1, "第三天行程", null, 20750, note = "09:00 景福宮 韓服體驗\n中午 土俗村蔘雞湯\n下午3點半 北村韓屋村 → 仁寺洞\n記得帶護照"),
