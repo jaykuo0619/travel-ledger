@@ -26,6 +26,7 @@ PLAYWRIGHT_DIR=/opt/node-tools/node_modules node desktop/test/e2e.mjs   # 桌面
 | `logic/ParserParityTest` + `desktop/test/parser.test.mjs` | 手機與桌面跑同一份 `desktop/test/parser-cases.json`,拆分與分類結果一致 |
 | `desktop/test/e2e.mjs` | 用 Chromium 實際操作桌面網頁:建旅程、輸入、貼上多行、拖曳換天、截圖、當日筆記、復原/重做(拖曳、整段打字算一步、欄位內的 Ctrl+Z、刪除後按提示復原含截圖、刪除整趟旅程後復原)、重新整理後資料還在、傳到手機的檔案內容;再打開手機檔案修改後傳回(產生 `roundtrip.zip`) |
 | `ui/DeleteSourceTest` | 匯入後刪除原檔:允許刪除的來源會刪掉,像 LINE 不允許的來源保留且不出錯 |
+| `ui/ImageSharpnessTest` | 同一張圖先以縮圖載入,再以全螢幕載入時拿到的是原尺寸(不是縮圖);長截圖以短邊決定縮小倍數 |
 | `logic/LinksTest` | 網址與電話偵測(不把日期、金額當電話) |
 | `ui/PasteDialogTest` | 貼上多筆對話框 |
 | `logic/*Test`、`ui/LogicTest` | 收據解析、貼上/地圖分享解析、計算機、換算 |
