@@ -238,6 +238,19 @@ class LedgerFlowTest {
         assertEquals(cat("雜項"), runBlocking { db.planDao().get(plan) }!!.categoryId)
     }
 
+    @Test fun aSumOnTheKeypadIsSavedAsItsResult() {
+        val trip = createTrip()
+        val vm = record(trip, "烤肉 3 人", "12800+2400×2", "吃", "信用卡", d(6, 12), currency = "JPY")
+        val r = rows(trip).single()
+        assertEquals(17600.0, r.amount, 0.0)
+        assertEquals(toHomeAmount(17600.0, 0.21), r.homeAmount, 0.0)
+        // Nothing to save when the sum comes to zero or less.
+        val next = ExpenseEditViewModel(app, db, trip, null, false)
+        "50−100".forEach { next.key(it.toString()) }
+        assertEquals(false, next.state!!.canSave)
+        assertTrue(vm.state != null)
+    }
+
     @Test fun removingAMemberClearsTheirPayments() {
         val trip = createTrip()
         val members = runBlocking { db.tripDao().getMembers(trip) }

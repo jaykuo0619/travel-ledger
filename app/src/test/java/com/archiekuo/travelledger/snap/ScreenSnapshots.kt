@@ -117,6 +117,13 @@ class ScreenSnapshots {
         )
     }
 
+    @Test fun expenseCalc() = both("expenseCalc") {
+        ExpenseEditScreen(
+            EditState(title = "烤肉 3 人", amount = "12800+2400×2", currency = "JPY", rate = "0.21", categoryId = 1, paymentId = 2, date = d(6, 12), minuteOfDay = 19 * 60),
+            true, categories, methods, emptyList(), emptyList(), listOf("TWD", "JPY"), null, false, ExpenseActions(),
+        )
+    }
+
     @Test fun expenseReceipt() = both("expenseReceipt") {
         ExpenseEditScreen(
             editState.copy(title = "", amount = ""), true, categories, methods,
