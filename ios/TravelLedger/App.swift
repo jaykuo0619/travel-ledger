@@ -17,7 +17,6 @@ struct TravelLedgerApp: App {
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 // A .zip opened with 卡溜趴 from LINE, Files or AirDrop.
                 .onOpenURL { url in model.receive(url) }
-                .modifier(BrandSplashCover())
         }
     }
 }

@@ -18,7 +18,6 @@
 		D7CC34A5497E9AE669C6BFD2 /* CoverArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = F322B027FBB5CFBE36AFD313 /* CoverArtwork.swift */; };
 		E067AB4660DFABEFB620C012 /* TripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7DB8436E01F2A1B58DB93FD /* TripView.swift */; };
 		F2CA96C9ADB308148E33D93C /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAB21CFEAD8DA29627A701A4 /* Components.swift */; };
-		B5A9D1C07E3F4A6288C1D2E4 /* BrandSplash.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A9D1C07E3F4A6288C1D2E3 /* BrandSplash.swift */; };
 		B5A9D1C07E3F4A6288C1D2E6 /* Coach.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A9D1C07E3F4A6288C1D2E5 /* Coach.swift */; };
 		B5A9D1C07E3F4A6288C1D2E8 /* PlanEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A9D1C07E3F4A6288C1D2E7 /* PlanEditView.swift */; };
 		B5A9D1C07E3F4A6288C1D2EA /* ExpenseEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A9D1C07E3F4A6288C1D2E9 /* ExpenseEditView.swift */; };
@@ -36,7 +35,6 @@
 		132AC0B2194695D36F63222F /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		54101FF59253EFF01F65140E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		5773333C2782021D4B5EB2DA /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
-		B5A9D1C07E3F4A6288C1D2E3 /* BrandSplash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandSplash.swift; sourceTree = "<group>"; };
 		B5A9D1C07E3F4A6288C1D2E5 /* Coach.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Coach.swift; sourceTree = "<group>"; };
 		B5A9D1C07E3F4A6288C1D2E7 /* PlanEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanEditView.swift; sourceTree = "<group>"; };
 		B5A9D1C07E3F4A6288C1D2E9 /* ExpenseEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpenseEditView.swift; sourceTree = "<group>"; };
@@ -92,7 +90,6 @@
 				7811E30E80E6DE826D699803 /* ImportHost.swift */,
 				97B1E6995AD0D1AF771C31A7 /* Info.plist */,
 				54101FF59253EFF01F65140E /* SettingsView.swift */,
-				B5A9D1C07E3F4A6288C1D2E3 /* BrandSplash.swift */,
 				B5A9D1C07E3F4A6288C1D2E5 /* Coach.swift */,
 				B5A9D1C07E3F4A6288C1D2E7 /* PlanEditView.swift */,
 				B5A9D1C07E3F4A6288C1D2E9 /* ExpenseEditView.swift */,
@@ -205,7 +202,6 @@
 				0E61A07E9DF82DC1CD3966B6 /* HomeView.swift in Sources */,
 				31D8E6F518DC5DEDF6D7B2DB /* ImportHost.swift in Sources */,
 				F82AA9E84B8F94893FAAA1C8 /* SettingsView.swift in Sources */,
-				B5A9D1C07E3F4A6288C1D2E4 /* BrandSplash.swift in Sources */,
 				B5A9D1C07E3F4A6288C1D2E6 /* Coach.swift in Sources */,
 				B5A9D1C07E3F4A6288C1D2E8 /* PlanEditView.swift in Sources */,
 				B5A9D1C07E3F4A6288C1D2EA /* ExpenseEditView.swift in Sources */,
