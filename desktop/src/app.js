@@ -1,7 +1,7 @@
 // 卡溜趴行程桌 — plan trips on a computer, then send them to the phone as a file.
 // Everything stays in this browser (IndexedDB); files move between the computer and the phone through LINE or similar.
 (() => {
-  const APP_VERSION = "1.1";
+  const APP_VERSION = "1.2";
   const FORMAT = "travelledger";
   const DEFAULT_CATEGORIES = ["吃", "交通", "購物", "住宿", "景點", "其他"];
   const CATEGORY_LOOK = {
@@ -37,7 +37,7 @@
     r.onerror = () => bad(r.error);
   });
 
-  const state = { trips: [], current: null, selectedDay: UNSCHEDULED, editing: null, dragging: null };
+  const state = { trips: [], current: null, selectedDay: UNSCHEDULED, editing: null, noteDay: null, dragging: null };
   const trip = () => state.trips.find((t) => t.uuid === state.current) || null;
   let saveTimer = null;
   function save(t = trip()) {
@@ -72,6 +72,7 @@
     await idb("readwrite", (s) => { s.clear(); state.trips.forEach((t) => s.put(t)); });
     render();
     if (state.editing) { if (editingPlan()) renderEditor(); else closeEditor(); }
+    if (state.noteDay != null) renderNoteEditor();
     updateUndoButtons();
     return true;
   }
@@ -183,7 +184,7 @@
       : `<span class="day">Day ${day - t.startDate + 1}</span><span class="date">${shortDate(day)}</span>`;
     return `<section class="col ${state.selectedDay === day ? "selected" : ""}" data-day="${key}">
       <div class="col-head">${head}<span class="count">${plans.length} 項</span></div>
-      <div class="daynote ${note ? "" : "empty"}" data-note="${key}">${note ? `<span class="label">${day === UNSCHEDULED ? "待排筆記" : "當日筆記"}</span>${linkify(note)}` : "＋ 寫筆記"}</div>
+      <div class="daynote ${note ? "" : "empty"}" data-note="${key}">${note ? `<span class="label">${day === UNSCHEDULED ? "待排筆記" : "當日筆記"}<span class="edit">✎ 修改</span></span>${linkify(note)}` : "＋ 寫筆記"}</div>
       ${plans.map(cardHtml).join("")}
       <div class="add"><textarea placeholder="＋ 新增行程(可貼上多行)" data-add="${key}"></textarea></div>
     </section>`;
@@ -219,13 +220,68 @@
 
   // ───────────────────────── editor drawer ─────────────────────────
   function openEditor(p) {
+    state.noteDay = null;
     state.editing = p.uuid;
     renderEditor();
   }
   function closeEditor() {
     state.editing = null;
+    state.noteDay = null;
     $("#drawer")?.remove();
     render();
+  }
+
+  // ── day note: edited in the same big drawer as a plan, saved as you type ──
+  function openNoteEditor(key) {
+    state.editing = null;
+    state.noteDay = key;
+    renderNoteEditor(true);
+  }
+  function closeNoteEditor() {
+    const key = state.noteDay;
+    const before = state.noteBefore;
+    closeEditor();
+    if (key != null && before && !(trip()?.dayNotes[key])) undoToast("已清除筆記");
+  }
+  function renderNoteEditor(opening = false) {
+    const t = trip();
+    const key = state.noteDay;
+    $("#drawer")?.remove();
+    if (!t || key == null) return;
+    const day = key === "u" ? null : +key;
+    const text = t.dayNotes[key] || "";
+    if (opening) state.noteBefore = text;
+    const title = day == null ? "待排筆記" : `Day ${day - t.startDate + 1} · ${shortDate(day)} 當日筆記`;
+    const el = document.createElement("aside");
+    el.className = "drawer";
+    el.id = "drawer";
+    el.innerHTML = `
+      <header><b>${esc(title)}</b>
+        <button class="icon-btn" id="nd-close" title="關閉">✕</button>
+      </header>
+      <div class="scroll note-scroll">
+        <textarea id="nd-text" class="note-text" placeholder="例如:今天早點出門、記得帶護照…">${esc(text)}</textarea>
+        <div class="links" id="nd-links"></div>
+        <p class="note-help">打字就會存好。清空就是刪除這則筆記;改錯可以按上方「↶ 復原」。</p>
+      </div>
+      <footer class="drawer-foot"><button class="btn primary" id="nd-done">完成</button></footer>`;
+    document.body.append(el);
+    const ta = $("#nd-text", el);
+    const links = () => {
+      $("#nd-links", el).innerHTML = linksIn(ta.value).map((u) => `<a class="btn small" href="${u.startsWith("www.") ? "https://" + u : u}" target="_blank" rel="noopener">↗ 開啟 ${esc(u.replace(/^https?:\/\//, "").split("/")[0])}</a>`).join("");
+    };
+    links();
+    ta.addEventListener("input", () => {
+      checkpoint("note:" + key);
+      trip().dayNotes[key] = ta.value.trim(); // "" is sent so the phone clears it too
+      save();
+      render();
+      links();
+    });
+    ta.addEventListener("blur", () => { history.field = null; });
+    $("#nd-close", el).addEventListener("click", closeNoteEditor);
+    $("#nd-done", el).addEventListener("click", closeNoteEditor);
+    if (opening) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
   }
   function editingPlan() { return trip()?.plans.find((p) => p.uuid === state.editing) || null; }
 
@@ -545,24 +601,7 @@
     const card = e.target.closest("[data-plan]");
     if (card && !e.target.closest("a")) { openEditor(trip().plans.find((p) => p.uuid === card.dataset.plan)); return; }
     const note = e.target.closest("[data-note]");
-    if (note && !e.target.closest("a") && !note.querySelector("textarea")) {
-      const key = note.dataset.note;
-      note.className = "daynote";
-      note.innerHTML = `<span class="label">${key === "u" ? "待排筆記" : "當日筆記"}</span><textarea>${esc(trip().dayNotes[key] || "")}</textarea>`;
-      const ta = note.querySelector("textarea");
-      ta.focus();
-      ta.addEventListener("blur", () => {
-        const text = ta.value.trim();
-        if (text !== (trip().dayNotes[key] || "")) {
-          checkpoint();
-          trip().dayNotes[key] = text; // "" is sent so the phone clears it too
-          save();
-          if (!text) undoToast("已清除筆記");
-        }
-        render();
-      });
-      return;
-    }
+    if (note && !e.target.closest("a")) { openNoteEditor(note.dataset.note); return; }
     const col = e.target.closest(".col");
     if (col) {
       state.selectedDay = dayOf(col.dataset.day);
@@ -593,7 +632,7 @@
         addPlans([it || { title: text }], day);
       }
     }
-    if (e.key === "Escape") { if ($(".lightbox")) $(".lightbox").remove(); else if ($(".backdrop")) $(".backdrop").remove(); else if (state.editing) closeEditor(); }
+    if (e.key === "Escape") { if ($(".lightbox")) $(".lightbox").remove(); else if ($(".backdrop")) $(".backdrop").remove(); else if (state.noteDay != null) closeNoteEditor(); else if (state.editing) closeEditor(); }
   });
 
   document.addEventListener("paste", async (e) => {
@@ -603,6 +642,7 @@
     const field = e.target.closest?.("input, textarea");
     if (images.length) {
       e.preventDefault();
+      if (state.noteDay != null) return toast("筆記不能放圖片,請放在行程裡");
       const editing = editingPlan();
       if (editing) return attachPictures(editing, images);
       checkpoint();

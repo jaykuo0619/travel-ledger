@@ -24,7 +24,7 @@ PLAYWRIGHT_DIR=/opt/node-tools/node_modules node desktop/test/e2e.mjs   # 桌面
 | `backup/DesktopExchangeTest` | 手機檔給桌面(產生 e2e 用的檔案)、桌面行程檔併入手機(更新/新增/刪除/當日筆記/截圖,帳目不動)、新建旅程、別人的旅程拒絕、真的由桌面網頁寫出的檔案能併入 |
 | `backup/CompatFixturesTest` | `compat/fixtures` 的範例檔仍能匯入(`WRITE_COMPAT_FIXTURES=1` 時重新產生);`compat/from-ios` 裡 iPhone 版寫的檔逐一匯入 |
 | `logic/ParserParityTest` + `desktop/test/parser.test.mjs` | 手機與桌面跑同一份 `desktop/test/parser-cases.json`,拆分與分類結果一致 |
-| `desktop/test/e2e.mjs` | 用 Chromium 實際操作桌面網頁:建旅程、輸入、貼上多行、拖曳換天、截圖、當日筆記、復原/重做(拖曳、整段打字算一步、欄位內的 Ctrl+Z、刪除後按提示復原含截圖、刪除整趟旅程後復原)、重新整理後資料還在、傳到手機的檔案內容;再打開手機檔案修改後傳回(產生 `roundtrip.zip`) |
+| `desktop/test/e2e.mjs` | 用 Chromium 實際操作桌面網頁:建旅程、輸入、貼上多行、拖曳換天、截圖、當日筆記、當日筆記大編輯區(打字即存、Esc 關閉保留、清空後按提示復原)、復原/重做(拖曳、整段打字算一步、欄位內的 Ctrl+Z、刪除後按提示復原含截圖、刪除整趟旅程後復原)、重新整理後資料還在、傳到手機的檔案內容;再打開手機檔案修改後傳回(產生 `roundtrip.zip`) |
 | `ui/DeleteSourceTest` | 匯入後刪除原檔:允許刪除的來源會刪掉,像 LINE 不允許的來源保留且不出錯 |
 | `data/LedgerFlowTest`(v0.10.3)| 基礎分類/付款方式不能刪、改名後仍受保護;自己新增的刪除後支出與行程改到「其他」(即使已改名);移除成員清掉付款人;只有相機拍的回憶照片存進相簿(相簿選的與收據不存) |
 | `ui/ImageSharpnessTest` | 同一張圖先以縮圖載入,再以全螢幕載入時拿到的是原尺寸(不是縮圖);長截圖以短邊決定縮小倍數 |

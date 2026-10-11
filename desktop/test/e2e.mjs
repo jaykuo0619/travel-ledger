@@ -97,10 +97,27 @@ await page.locator("#drawer a", { hasText: "usj.co.jp" }).waitFor();
 await shot("03-editor");
 await page.locator("#ed-close").click();
 
-// Day note on Day 3.
+// Day note on Day 3: opens in the big drawer, saved as you type.
 await col("Day 3").locator("[data-note]").click();
-await col("Day 3").locator("[data-note] textarea").fill("搭 JR 到京都");
-await page.locator(".brand").click(); // blur saves
+await page.locator("#nd-text").fill("搭 JR 到京都 https://www.jr-odekake.net");
+await page.locator("#nd-links a", { hasText: "jr-odekake.net" }).waitFor();
+await col("Day 3").locator(".daynote", { hasText: "搭 JR 到京都" }).waitFor(); // the board follows while typing
+await shot("04a-day-note");
+await page.locator("#nd-done").click();
+await page.locator("#drawer").waitFor({ state: "detached" });
+// Edit it again (✎ 修改; tapping the link itself opens the link): the drawer opens with the text; Esc closes and keeps it.
+await col("Day 3").locator("[data-note] .edit").click();
+assert.equal(await page.locator("#nd-text").inputValue(), "搭 JR 到京都 https://www.jr-odekake.net");
+await page.locator("#nd-text").fill("搭 JR 到京都");
+await page.keyboard.press("Escape");
+await page.locator("#drawer").waitFor({ state: "detached" });
+await col("Day 3").locator(".daynote", { hasText: /^當日筆記✎ 修改搭 JR 到京都$/ }).waitFor();
+// Clearing it deletes the note; the toast brings it back.
+await col("Day 3").locator("[data-note]").click();
+await page.locator("#nd-text").fill("");
+await page.locator("#nd-close").click();
+await col("Day 3").locator(".daynote.empty").waitFor();
+await page.locator(".toast-action", { hasText: "復原" }).click();
 await col("Day 3").locator(".daynote", { hasText: "搭 JR 到京都" }).waitFor();
 await shot("04-board");
 
@@ -199,8 +216,8 @@ if (!existsSync(phoneFile)) {
   await page.locator("#ed-close").click();
   // Day note on Day 3.
   await col("Day 3").locator("[data-note]").click();
-  await col("Day 3").locator("[data-note] textarea").fill("先換錢再出門");
-  await page.locator(".brand").click();
+  await page.locator("#nd-text").fill("先換錢再出門");
+  await page.locator("#nd-done").click();
   await col("Day 3").locator(".daynote", { hasText: "先換錢再出門" }).waitFor();
   await shot("06-phone-trip-edited");
 
