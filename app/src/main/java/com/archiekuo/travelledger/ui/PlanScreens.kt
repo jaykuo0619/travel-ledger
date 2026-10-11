@@ -35,6 +35,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -476,12 +479,22 @@ fun PlanEditScreen(
     addingPictures: Boolean = false,
 ) {
     var pickTime by remember { mutableStateOf(false) }
+    // Saving needs a name: ✓ always answers, pointing at the name when it is missing.
+    var nameMissing by remember { mutableStateOf(false) }
+    val nameFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val hasName = item?.title?.isNotBlank() == true
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppTopBar(
                 if (isNew) "新增行程" else "編輯行程", subtitle = trip?.name, onBack = actions.back, closeIcon = true,
-                actions = { ConfirmButton(item?.title?.isNotBlank() == true, actions.save) },
+                actions = {
+                    ConfirmButton(item != null, ready = hasName) {
+                        if (hasName) actions.save()
+                        else { nameMissing = true; runCatching { nameFocus.requestFocus() }; keyboard?.show() }
+                    }
+                },
             )
         },
     ) { pad ->
@@ -491,7 +504,12 @@ fun PlanEditScreen(
             Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            TitleField(p.title, "景點、餐廳或活動名稱") { v -> actions.edit { it.copy(title = v) } }
+            TitleField(p.title, "景點、餐廳或活動名稱", error = nameMissing && p.title.isBlank(), focusRequester = nameFocus) { v ->
+                actions.edit { it.copy(title = v) }
+            }
+            if (nameMissing && p.title.isBlank()) {
+                Text("請輸入名稱才能儲存", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 6.dp))
+            }
             CategoryRow(categories, p.categoryId) { id -> actions.edit { it.copy(categoryId = id) } }
 
             SectionHeader("哪一天") {
@@ -794,7 +812,7 @@ fun PictureStrip(
 
 /** Large single-line title input used at the top of editors. */
 @Composable
-fun TitleField(value: String, placeholder: String, onChange: (String) -> Unit) {
+fun TitleField(value: String, placeholder: String, error: Boolean = false, focusRequester: FocusRequester? = null, onChange: (String) -> Unit) {
     // Plan names are often whole sentences ("搭乘 01A 循環公車到南大門市場站…"): one line until it needs a second, Enter allowed.
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -802,13 +820,14 @@ fun TitleField(value: String, placeholder: String, onChange: (String) -> Unit) {
     val shape = RoundedCornerShape(16.dp)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(shape).background(cs.surfaceContainerLowest)
-            .border(if (focused) 1.5.dp else 1.dp, if (focused) cs.primary else ledger.hairline, shape)
+            .border(if (focused || error) 1.5.dp else 1.dp, if (error) cs.error else if (focused) cs.primary else ledger.hairline, shape)
             .padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.Top,
     ) {
         val style = MaterialTheme.typography.titleMedium.copy(color = cs.onSurface)
         BasicTextField(
-            value, onChange, Modifier.weight(1f).padding(top = 8.dp, bottom = 8.dp), minLines = 1, maxLines = 2, textStyle = style,
+            value, onChange, Modifier.weight(1f).padding(top = 8.dp, bottom = 8.dp).then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier),
+            minLines = 1, maxLines = 2, textStyle = style,
             cursorBrush = SolidColor(cs.primary), interactionSource = interaction,
             decorationBox = { inner ->
                 if (value.isEmpty()) Text(placeholder, style = style.copy(fontWeight = FontWeight.Normal), color = ledger.textMuted)

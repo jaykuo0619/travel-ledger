@@ -168,7 +168,12 @@ class AppFlowTest {
         tap("行程")
         tap("新增行程")
         assertTrue(seen("景點、餐廳或活動名稱"))
+        // ✓ without a name says what is missing instead of doing nothing.
+        rule.onNodeWithContentDescription("儲存").assertIsEnabled().performClick()
+        assertTrue(seen("請輸入名稱才能儲存"))
         type(0, "通天閣")
+        rule.waitForIdle()
+        assertTrue("hint goes once there is a name", !present("請輸入名稱才能儲存"))
         val today = java.time.LocalDate.now()
         rule.onAllNodesWithText("${today.monthValue}/${today.dayOfMonth}").onFirst().performClick()
         rule.onAllNodesWithText("待排").onFirst().performClick()

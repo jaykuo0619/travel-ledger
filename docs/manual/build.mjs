@@ -27,7 +27,7 @@ await page.pdf({
   headerTemplate: "<span></span>",
   footerTemplate:
     '<div style="width:100%;font-size:8px;color:#8e91a2;padding:0 17mm;display:flex;justify-content:space-between;font-family:sans-serif">' +
-    '<span>卡溜趴 使用說明書 v0.10.4</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>',
+    '<span>卡溜趴 使用說明書 v0.10.5</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>',
 });
 await browser.close();
 console.log("wrote 卡溜趴使用說明書.pdf");
