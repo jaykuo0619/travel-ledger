@@ -27,6 +27,8 @@ data class ManageItem(
     val color: Color,
     val iconKey: String = "",
     val colorIdx: Int = -1,
+    /** Only what the user added can be deleted; the app's own items can be renamed. */
+    val deletable: Boolean = true,
 )
 
 /** Editable, reorderable list used for categories (with icon/color) and payment methods. */
@@ -35,8 +37,10 @@ fun ManageListScreen(
     title: String,
     items: List<ManageItem>,
     styleEditable: Boolean,
-    protectedName: String?,
-    deleteHint: String,
+    /** e.g. "基礎分類不能刪除,可以改名。" */
+    builtInNote: String,
+    /** What deleting this item would change, worked out when the user asks to delete it. */
+    deleteHint: suspend (id: Long) -> String,
     onBack: () -> Unit,
     onAdd: (name: String, icon: String, color: Int) -> Unit,
     onUpdate: (id: Long, name: String, icon: String, color: Int) -> Unit,
@@ -46,6 +50,8 @@ fun ManageListScreen(
     var editing by remember { mutableStateOf<ManageItem?>(null) }
     var adding by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<ManageItem?>(null) }
+    var hint by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(deleting) { hint = deleting?.let { deleteHint(it.id) } }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -79,14 +85,15 @@ fun ManageListScreen(
                             Text(item.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                             SmallIcon(Icons.Rounded.KeyboardArrowUp, "上移", index > 0) { onMove(index, index - 1) }
                             SmallIcon(Icons.Rounded.KeyboardArrowDown, "下移", index < items.lastIndex) { onMove(index, index + 1) }
-                            SmallIcon(Icons.Rounded.DeleteOutline, "刪除", item.name != protectedName) { deleting = item }
+                            if (item.deletable) SmallIcon(Icons.Rounded.DeleteOutline, "刪除", true) { deleting = item }
+                            else Spacer(Modifier.width(40.dp))
                         }
                     }
                 }
             }
             item {
                 Text(
-                    "點項目可修改名稱${if (styleEditable) "、圖示與顏色" else ""}",
+                    "點項目可修改名稱${if (styleEditable) "、圖示與顏色" else ""}。$builtInNote",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 12.dp, start = 4.dp),
                 )
@@ -112,7 +119,7 @@ fun ManageListScreen(
             onDismissRequest = { deleting = null },
             icon = { Icon(Icons.Rounded.DeleteOutline, null) },
             title = { Text("刪除「${item.name}」?") },
-            text = { Text(deleteHint) },
+            text = { Text(hint ?: "") },
             confirmButton = { TextButton({ onDelete(item.id); deleting = null }) { Text("刪除", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton({ deleting = null }) { Text("取消") } },
         )

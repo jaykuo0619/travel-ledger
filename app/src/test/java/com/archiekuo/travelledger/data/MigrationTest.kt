@@ -35,7 +35,7 @@ class MigrationTest {
             close()
         }
         // Validates each step's resulting schema against the exported schema files.
-        helper.runMigrationsAndValidate(name, 10, true, *AppDatabase.ALL_MIGRATIONS).close()
+        helper.runMigrationsAndValidate(name, 11, true, *AppDatabase.ALL_MIGRATIONS).close()
 
         val db = Room.databaseBuilder(ApplicationProvider.getApplicationContext(), AppDatabase::class.java, name)
             .addMigrations(*AppDatabase.ALL_MIGRATIONS).allowMainThreadQueries().build()
@@ -49,6 +49,8 @@ class MigrationTest {
             assertNull(row.planItemId)
             val cat = db.lookupDao().observeCategories().first().single()
             assertEquals(Triple("吃", "", -1), Triple(cat.name, cat.icon, cat.color))
+            assertEquals("吃", cat.builtIn) // v11: the starting categories can be renamed but not deleted
+            assertEquals("信用卡", db.lookupDao().getPaymentMethods().single().builtIn)
             val trip = db.tripDao().observeTrip(1).first()!!
             assertNull(trip.coverPath)
             assertNull(trip.coverTheme)
@@ -77,6 +79,22 @@ class MigrationTest {
         helper.runMigrationsAndValidate(name, 8, true, AppDatabase.MIGRATION_7_8).close()
         helper.runMigrationsAndValidate(name, 9, true, AppDatabase.MIGRATION_8_9).close()
         helper.runMigrationsAndValidate(name, 10, true, AppDatabase.MIGRATION_9_10).close()
+        helper.runMigrationsAndValidate(name, 11, true, AppDatabase.MIGRATION_10_11).close()
+    }
+
+    /** v11 marks only the starting names, and only the first row of each, as built in. */
+    @Test fun v11MarksTheStartingCategories() {
+        helper.createDatabase(name, 10).apply {
+            execSQL("INSERT INTO category (id, name, sortOrder, icon, color) VALUES (1, '吃', 0, '', -1), (2, '溫泉', 1, '', -1), (3, '吃', 2, '', -1), (4, '其他', 3, '', -1)")
+            execSQL("INSERT INTO payment_method (id, name, sortOrder) VALUES (1, '現金', 0), (2, 'Suica', 1)")
+            close()
+        }
+        val db = helper.runMigrationsAndValidate(name, 11, true, AppDatabase.MIGRATION_10_11)
+        val cats = db.query("SELECT id, builtIn FROM category ORDER BY id").use { c -> generateSequence { if (c.moveToNext()) c.getLong(0) to c.getString(1) else null }.toList() }
+        assertEquals(listOf(1L to "吃", 2L to null, 3L to null, 4L to "其他"), cats)
+        val pays = db.query("SELECT id, builtIn FROM payment_method ORDER BY id").use { c -> generateSequence { if (c.moveToNext()) c.getLong(0) to c.getString(1) else null }.toList() }
+        assertEquals(listOf(1L to "現金", 2L to null), pays)
+        db.close()
     }
 
     @Test fun v6GivesEachTripADifferentUuid() {

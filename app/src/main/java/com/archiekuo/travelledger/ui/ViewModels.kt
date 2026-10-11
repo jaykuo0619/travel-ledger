@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.archiekuo.travelledger.data.AppDatabase
 import com.archiekuo.travelledger.data.UNSCHEDULED_DAY
 import com.archiekuo.travelledger.data.Category
+import com.archiekuo.travelledger.data.FALLBACK_CATEGORY
 import com.archiekuo.travelledger.data.Expense
 import com.archiekuo.travelledger.data.ExpenseRow
 import com.archiekuo.travelledger.data.HOME_CURRENCY
@@ -134,7 +135,16 @@ data class EditState(
 }
 
 /** A photo attached to the expense being edited; [id] is null until saved. */
-data class PhotoItem(val id: Long?, val path: String, val type: String, val text: String = "")
+data class PhotoItem(
+    val id: Long?,
+    val path: String,
+    val type: String,
+    val text: String = "",
+    /** Picked from the gallery: it is already there, so it is never copied back. */
+    val fromAlbum: Boolean = false,
+    /** The camera's full-quality file, kept until save so the gallery gets it rather than our smaller copy. */
+    val original: String? = null,
+)
 
 const val MAX_PHOTOS = 3
 
@@ -224,17 +234,21 @@ class ExpenseEditViewModel(
     fun pickSuggestion(s: TitleSuggestion) = edit { it.copy(title = s.title, categoryId = s.categoryId ?: it.categoryId) }
 
     /** [mode]: RECEIPT reads it, MEMORY just keeps it, null decides from the content (gallery picks). */
-    fun addPhoto(uri: Uri, mode: String?, cleanup: File? = null) {
-        if (photos.size >= MAX_PHOTOS) return
+    /** [cameraFile] is the camera's own file (null for a photo picked from the gallery). */
+    fun addPhoto(uri: Uri, mode: String?, cameraFile: File? = null) {
+        if (photos.size >= MAX_PHOTOS) { cameraFile?.delete(); return }
         processing = true
         viewModelScope.launch {
+            var keep = false
             runCatching { PhotoProcessor.process(app, uri, state?.currency?.takeIf { it != HOME_CURRENCY }, mode) }
                 .onSuccess { p ->
-                    photos += PhotoItem(null, p.path, p.type, p.text)
+                    // A memory from the camera: the gallery gets the full-quality original when the expense is saved.
+                    keep = cameraFile != null && p.type == PhotoType.MEMORY && saveMemoriesToGallery
+                    photos += PhotoItem(null, p.path, p.type, p.text, fromAlbum = cameraFile == null, original = cameraFile?.absolutePath?.takeIf { keep })
                     if (p.text.isNotBlank()) ocrText = listOf(ocrText, p.text).filter { it.isNotBlank() }.joinToString("\n")
                     if (p.type == PhotoType.RECEIPT && p.guess.hasData) receipt = p.guess
                 }
-            cleanup?.delete()
+            if (!keep) cameraFile?.delete()
             processing = false
         }
     }
@@ -242,6 +256,7 @@ class ExpenseEditViewModel(
     fun removePhoto(index: Int) {
         val p = photos.getOrNull(index) ?: return
         photos.removeAt(index)
+        p.original?.let { File(it).delete() }
         if (p.id == null) PhotoProcessor.delete(p.path) // saved photos are removed on save
     }
 
@@ -303,15 +318,21 @@ class ExpenseEditViewModel(
                 val path = PhotoProcessor.moveToType(app, p.path, p.type)
                 val old = originalPhotos.find { it.id == p.id }
                 if (old == null) {
-                    var saved = false
-                    if (p.type == PhotoType.MEMORY && saveMemoriesToGallery) {
-                        saved = PhotoProcessor.saveToGallery(app, Uri.fromFile(File(path)))
+                    // Memories go to the gallery, at the camera's full quality when we have it. A photo picked from the
+                    // gallery is already there and is not copied again.
+                    val saved = when {
+                        p.type != PhotoType.MEMORY -> false
+                        p.fromAlbum -> true
+                        saveMemoriesToGallery -> PhotoProcessor.saveToGallery(app, Uri.fromFile(File(p.original ?: path)))
+                        else -> false
                     }
                     photoDao.insert(Photo(expenseId = id, type = p.type, path = path, savedToGallery = saved))
                 } else if (old.type != p.type || old.path != path) {
                     photoDao.update(old.copy(type = p.type, path = path))
                 }
             }
+
+            photos.forEach { p -> p.original?.let { File(it).delete() } }
 
             // First time a foreign currency is used in this trip: remember its rate as the trip default.
             if (s.currency != HOME_CURRENCY && s.currency !in tripRates && !sharedTrip) {
@@ -324,6 +345,7 @@ class ExpenseEditViewModel(
     /** Leaving without saving: drop photos taken in this session. */
     fun cancel() {
         photos.filter { it.id == null }.forEach { PhotoProcessor.delete(it.path) }
+        photos.forEach { p -> p.original?.let { File(it).delete() } }
     }
 
     fun delete(onDone: () -> Unit) {
@@ -353,6 +375,21 @@ class LookupViewModel(private val db: AppDatabase) : ViewModel() {
     }
 
     fun deleteCategory(id: Long) = viewModelScope.launch { db.lookupDao().deleteCategory(id) }
+
+    /** What deleting this category would change, for the confirmation. */
+    suspend fun categoryDeleteHint(id: Long): String {
+        val dao = db.lookupDao()
+        val expenses = dao.expensesWithCategory(id)
+        val plans = dao.plansWithCategory(id)
+        val other = dao.findBuiltInCategoryId(FALLBACK_CATEGORY)?.let { dao.getCategory(it)?.name } ?: FALLBACK_CATEGORY
+        val used = listOfNotNull(if (expenses > 0) "$expenses 筆支出" else null, if (plans > 0) "$plans 個行程" else null)
+        return if (used.isEmpty()) "沒有支出或行程使用這個分類。" else "有 ${used.joinToString("、")}使用這個分類,刪除後會改成「$other」。"
+    }
+
+    suspend fun methodDeleteHint(id: Long): String {
+        val n = db.lookupDao().expensesWithPaymentMethod(id)
+        return if (n == 0) "沒有支出使用這個付款方式。" else "有 $n 筆支出使用這個付款方式,刪除後會變成「未指定」。"
+    }
 
     fun moveCategory(from: Int, to: Int) = viewModelScope.launch {
         val list = categories.value.toMutableList()

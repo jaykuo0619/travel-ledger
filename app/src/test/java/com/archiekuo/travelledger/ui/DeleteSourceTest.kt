@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
+import com.archiekuo.travelledger.backup.TripArchive
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -43,6 +44,15 @@ class DeleteSourceTest {
         val file = File.createTempFile("卡溜趴備份", ".zip")
         assertTrue(ArchiveFiles.deleteSource(ApplicationProvider.getApplicationContext(), Uri.parse("content://test.files${file.absolutePath}")))
         assertFalse(file.exists())
+    }
+
+    /** A backup may be the only copy, so it is never deleted; nor anything when the setting is off or the import failed. */
+    @Test fun whichImportsDeleteTheFile() {
+        fun imported(kind: String) = TripArchive.Result.Imported(kind, listOf(1L), 0)
+        for (kind in listOf(TripArchive.KIND_TRIP, TripArchive.KIND_ADDITIONS, TripArchive.KIND_PLANS)) assertTrue(shouldDeleteSource(true, imported(kind)))
+        assertFalse(shouldDeleteSource(true, imported(TripArchive.KIND_BACKUP)))
+        assertFalse(shouldDeleteSource(false, imported(TripArchive.KIND_TRIP)))
+        assertFalse(shouldDeleteSource(true, TripArchive.Result.Failed("壞掉")))
     }
 
     @Test fun keptWhenNotAllowed() = runBlocking {

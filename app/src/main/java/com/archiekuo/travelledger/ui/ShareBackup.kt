@@ -104,6 +104,10 @@ object ArchiveFiles {
     }
 }
 
+/** Whether the opened file goes after [result]: only when the setting is on, the import worked, and it is not a backup. */
+internal fun shouldDeleteSource(enabled: Boolean, result: TripArchive.Result): Boolean =
+    enabled && result is TripArchive.Result.Imported && result.kind != TripArchive.KIND_BACKUP
+
 /** "分享給同伴": who is sharing and whether to include photos. */
 @Composable
 fun ShareTripDialog(tripName: String, myName: String, busy: Boolean, onDismiss: () -> Unit, onShare: (name: String, photos: Boolean) -> Unit) {
@@ -351,7 +355,7 @@ fun ImportConfirmDialog(
  * Lives at the top of the navigation graph so a file can arrive on any screen.
  */
 @Composable
-fun ImportHost(db: AppDatabase, onImported: (tripId: Long?) -> Unit) {
+fun ImportHost(db: AppDatabase, deleteImportedFile: Boolean = true, onImported: (tripId: Long?) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val uri = ImportInbox.pending
@@ -413,9 +417,12 @@ fun ImportHost(db: AppDatabase, onImported: (tripId: Long?) -> Unit) {
         }
     }
 
-    /** After an import the opened file is no longer needed, so it goes (when Android lets us). */
+    /**
+     * After an import the opened file is no longer needed, so it goes (when Android lets us and the setting is on).
+     * A backup is never deleted: it may be the only copy.
+     */
     suspend fun done(result: TripArchive.Result, source: Uri?) {
-        val deleted = result is TripArchive.Result.Imported && source != null && ArchiveFiles.deleteSource(context, source)
+        val deleted = shouldDeleteSource(deleteImportedFile, result) && source != null && ArchiveFiles.deleteSource(context, source)
         withContext(Dispatchers.Main) { finish(result, deleted) }
     }
 

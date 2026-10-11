@@ -157,8 +157,8 @@ class ScreenSnapshots {
     @Test fun categories() = both("categories") {
         ManageListScreen(
             "分類管理",
-            categories.map { c -> categoryStyle(c.name, c.icon, c.color).let { ManageItem(c.id, c.name, it.icon, it.color) } },
-            true, "其他", "", {}, { _, _, _ -> }, { _, _, _, _ -> }, {}, { _, _ -> },
+            categories.map { c -> categoryStyle(c.name, c.icon, c.color).let { ManageItem(c.id, c.name, it.icon, it.color, deletable = c.name == "飲料") } },
+            true, "基礎分類不能刪除,可以改名;自己新增的可以刪除。", { "" }, {}, { _, _, _ -> }, { _, _, _, _ -> }, {}, { _, _ -> },
         )
     }
 

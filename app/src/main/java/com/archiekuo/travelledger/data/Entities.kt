@@ -71,13 +71,22 @@ data class Category(
     @ColumnInfo(defaultValue = "") val icon: String = "",
     /** Palette index (see CategoryStyle); -1 means "guess from the name". */
     @ColumnInfo(defaultValue = "-1") val color: Int = -1,
+    /** For the categories the app starts with: which one it was (its first name), so it can be renamed but not deleted. */
+    val builtIn: String? = null,
 )
+
+/** The category a deleted one falls back to. */
+const val FALLBACK_CATEGORY = "其他"
+val BUILT_IN_CATEGORIES = listOf("吃", "交通", "購物", "住宿", "景點", FALLBACK_CATEGORY)
+val BUILT_IN_PAYMENT_METHODS = listOf("現金", "信用卡", "行動支付")
 
 @Entity(tableName = "payment_method")
 data class PaymentMethod(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val sortOrder: Int = 0,
+    /** For the payment methods the app starts with (its first name): can be renamed but not deleted. */
+    val builtIn: String? = null,
 )
 
 @Entity(
