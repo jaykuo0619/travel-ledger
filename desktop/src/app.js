@@ -1,7 +1,7 @@
 // 卡溜趴行程桌 — plan trips on a computer, then send them to the phone as a file.
 // Everything stays in this browser (IndexedDB); files move between the computer and the phone through LINE or similar.
 (() => {
-  const APP_VERSION = "1.2";
+  const APP_VERSION = "1.3";
   const FORMAT = "travelledger";
   const DEFAULT_CATEGORIES = ["吃", "交通", "購物", "住宿", "景點", "其他"];
   const CATEGORY_LOOK = {
@@ -40,12 +40,49 @@
   const state = { trips: [], current: null, selectedDay: UNSCHEDULED, editing: null, noteDay: null, dragging: null };
   const trip = () => state.trips.find((t) => t.uuid === state.current) || null;
   let saveTimer = null;
+  // Changed trips wait a moment (typing), then are written together. Every changed trip is kept, even when
+  // another trip is changed before the write.
+  const unsaved = new Map();
   function save(t = trip()) {
     if (!t) return;
     t.updatedAt = Date.now();
+    unsaved.set(t.uuid, t);
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => idb("readwrite", (s) => s.put(t)), 250);
+    saveTimer = setTimeout(flush, 250);
   }
+  async function flush() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    const list = [...unsaved.values()];
+    unsaved.clear();
+    if (!list.length) return;
+    await idb("readwrite", (s) => list.forEach((t) => s.put(t)));
+    announce();
+  }
+
+  // ── the page open in more than one tab or window: each one follows what the others save ──
+  const channel = "BroadcastChannel" in window ? new BroadcastChannel("kalupa-planner") : null;
+  const announce = () => channel?.postMessage("saved");
+  const signature = (trips) => trips.map((t) => `${t.uuid}:${t.updatedAt}`).sort().join("|");
+  async function reloadFromStorage() {
+    if (!db || unsaved.size) return; // our own change is about to be written
+    const trips = (await idb("readonly", (s) => s.getAll())) || [];
+    if (unsaved.size || signature(trips) === signature(state.trips)) return;
+    state.trips = trips;
+    if (!trips.some((t) => t.uuid === state.current)) state.current = trips[0]?.uuid || null;
+    // Steps recorded here are from before the other tab's change; undoing them would overwrite it.
+    history.undo = [];
+    history.redo = [];
+    history.field = null;
+    updateUndoButtons();
+    render();
+    if (state.editing) { if (editingPlan()) renderEditor(); else closeEditor(); }
+    if (state.noteDay != null) renderNoteEditor();
+  }
+  channel?.addEventListener("message", reloadFromStorage);
+  window.addEventListener("focus", reloadFromStorage);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); else reloadFromStorage(); });
+  window.addEventListener("pagehide", flush);
 
   // ── undo / redo: a snapshot of every trip before each change (pictures are blobs, copied by reference) ──
   const MAX_UNDO = 100;
@@ -65,11 +102,13 @@
     to.push(snapshot());
     const snap = from.pop();
     clearTimeout(saveTimer);
+    unsaved.clear();
     state.trips = structuredClone(snap.trips);
     state.current = state.trips.some((t) => t.uuid === snap.current) ? snap.current : state.trips[0]?.uuid || null;
     if (state.current) localStorage.setItem("current", state.current);
     history.field = null;
     await idb("readwrite", (s) => { s.clear(); state.trips.forEach((t) => s.put(t)); });
+    announce();
     render();
     if (state.editing) { if (editingPlan()) renderEditor(); else closeEditor(); }
     if (state.noteDay != null) renderNoteEditor();
@@ -430,7 +469,9 @@
       if (del) del.onclick = async () => {
         checkpoint();
         state.trips = state.trips.filter((x) => x !== existing);
+        unsaved.delete(existing.uuid);
         await idb("readwrite", (s) => s.delete(existing.uuid));
+        announce();
         state.current = state.trips[0]?.uuid || null;
         close();
         render();
@@ -583,7 +624,9 @@
         checkpoint();
         for (const t of incoming) {
           state.trips = state.trips.filter((x) => x.uuid !== t.uuid).concat(t);
+          unsaved.delete(t.uuid);
           await idb("readwrite", (s) => s.put(t));
+          announce();
         }
         state.current = incoming[0].uuid;
         localStorage.setItem("current", state.current);

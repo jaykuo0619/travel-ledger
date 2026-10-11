@@ -231,6 +231,27 @@ if (!existsSync(phoneFile)) {
   console.log("wrote", path.relative(root, roundtrip));
 }
 
+// ── 3. The page open twice (e.g. the file double-clicked again): neither tab wipes out the other's plans ──
+{
+  const other = await context.newPage();
+  other.on("pageerror", (e) => errors.push(e.message));
+  await other.goto(page_);
+  await other.waitForFunction(() => window.__ready === true);
+  const colIn = (p, label) => p.locator(".col").filter({ has: p.locator(".col-head", { hasText: label }) });
+  await colIn(page, "待排").locator("textarea[data-add]").fill("通天閣");
+  await colIn(page, "待排").locator("textarea[data-add]").press("Enter");
+  await colIn(other, "待排").locator(".card", { hasText: "通天閣" }).waitFor(); // the other tab follows
+  await colIn(other, "Day 1").locator("textarea[data-add]").fill("梅田藍天大廈");
+  await colIn(other, "Day 1").locator("textarea[data-add]").press("Enter");
+  await colIn(page, "Day 1").locator(".card", { hasText: "梅田藍天大廈" }).waitFor();
+  await other.waitForTimeout(400);
+  await page.reload();
+  await page.waitForFunction(() => window.__ready === true);
+  await colIn(page, "待排").locator(".card", { hasText: "通天閣" }).waitFor();
+  await colIn(page, "Day 1").locator(".card", { hasText: "梅田藍天大廈" }).waitFor();
+  await other.close();
+}
+
 assert.deepEqual(errors, [], "no script errors");
 await browser.close();
 console.log("desktop e2e ok");

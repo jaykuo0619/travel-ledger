@@ -6,7 +6,7 @@ import path from "node:path";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const read = (f) => readFileSync(path.join(dir, "src", f), "utf8");
-export const VERSION = "1.2";
+export const VERSION = "1.3";
 const html = read("index.html")
   .replace("/*STYLE*/", () => read("style.css"))
   .replace("/*PARSER*/", () => read("parser.js"))
