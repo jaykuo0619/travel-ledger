@@ -108,6 +108,8 @@ struct ExpenseEditView: View {
                                 onKey: { amount = applyKey(amount, $0) }, onCurrency: setCurrency,
                                 onOtherCurrency: { pickingCurrency = true },
                                 onRate: { rateDraft = rate; editingRate = true }, onSave: save)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                         .transition(.move(edge: .bottom))
                 }
             }
@@ -744,14 +746,16 @@ private struct KeypadPanel: View {
                     Button("其他幣別…", action: onOtherCurrency)
                 } label: {
                     HStack(spacing: 4) {
-                        Text(currency).appFont(size: 17, weight: .bold)
+                        Text(currency).appFont(size: 17, weight: .bold).lineLimit(1)
                         Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold))
                     }
+                    .fixedSize()
                     .padding(.horizontal, 12).frame(minHeight: 44)
                     .background(Palette.primaryContainer, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .foregroundStyle(Palette.onPrimaryContainer)
                 }
-                amountDisplay
+                // Its own height, whatever else wants room: the figure must not shrink because the keypad is tall.
+                amountDisplay.fixedSize(horizontal: false, vertical: true)
             }
 
             rateLine

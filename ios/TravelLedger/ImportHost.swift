@@ -6,12 +6,15 @@ enum ImportStep: Identifiable, Sendable {
     case confirm(TripArchive.Summary, existing: Set<String>, newer: [String])
     case additions(TripArchive.Additions)
     case plans(TripArchive.PlansPreview)
+    /// A copy of my own trip came back from a companion: what they have and I don't.
+    case newItems(TripArchive.Additions)
 
     var id: String {
         switch self {
         case .confirm: return "confirm"
         case .additions: return "additions"
         case .plans: return "plans"
+        case .newItems: return "newItems"
         }
     }
 }
@@ -38,7 +41,16 @@ struct ImportHost: ViewModifier {
                             run { $0.importAdditions($1, accepted: chosen) }
                         }
                     case .plans(let preview):
-                        PlansPreviewSheet(preview: preview, busy: busy, onCancel: cancel) { run { $0.importPlans($1) } }
+                        PlansPreviewSheet(preview: preview, busy: busy, onCancel: cancel) { organizer in
+                            // Someone else's trip becomes their read-only copy on this phone.
+                            run(done: organizer == nil ? nil : "已匯入,這趟旅程只能看、不能改") { $0.importPlans($1, organizer: organizer) }
+                        }
+                    case .newItems(let found):
+                        ReviewAdditionsSheet(
+                            additions: found, busy: busy, title: "\(found.from) 傳回的旅程",
+                            text: "「\(found.tripName)」是你記帳的旅程。下面是對方有、你手機上沒有的項目,要加入的打勾;你原本的內容不會被改動。(你刪掉過的項目也可能出現在這裡,不要的取消勾選。)加入後記得再分享一次給大家。",
+                            onCancel: cancel
+                        ) { chosen in run { $0.importNewItems($1, accepted: chosen) } }
                     }
                 }
                 .interactiveDismissDisabled(busy)
@@ -64,6 +76,13 @@ struct ImportHost: ViewModifier {
                 case TripArchive.kindAdditions: return .additions(try TripArchive.readAdditions(url))
                 case TripArchive.kindPlans: return .plans(try archive.previewPlans(url))
                 default:
+                    // My own trip, sent back by a companion: offer what they have and I don't instead of refusing.
+                    if s.kind == TripArchive.kindTrip, let found = try archive.readNewItems(url) {
+                        if found.items.isEmpty {
+                            throw TripArchive.BadArchive("「\(found.tripName)」跟你手機上的一樣,沒有新的項目。如果同伴有補充,請他在旅程上方按「傳給記帳人」再傳給你。")
+                        }
+                        return .newItems(found)
+                    }
                     let newer = s.kind == TripArchive.kindBackup ? try archive.newerOnPhone(s) : []
                     return .confirm(s, existing: try archive.existing(s), newer: newer)
                 }
@@ -83,7 +102,8 @@ struct ImportHost: ViewModifier {
         model.cancelImport()
     }
 
-    private func run(_ work: @escaping @Sendable (TripArchive, URL) -> TripArchive.Result) {
+    /// [done]: what to say afterwards instead of the usual message for that kind of file.
+    private func run(done: String? = nil, _ work: @escaping @Sendable (TripArchive, URL) -> TripArchive.Result) {
         guard let url = model.incoming else { return }
         busy = true
         let archive = model.archive
@@ -91,7 +111,7 @@ struct ImportHost: ViewModifier {
             let result = await Task.detached(priority: .userInitiated) { work(archive, url) }.value
             busy = false
             step = nil
-            model.finishImport(result)
+            model.finishImport(result, message: done)
         }
     }
 }
@@ -198,19 +218,24 @@ private struct ImportConfirmSheet: View {
 private struct ReviewAdditionsSheet: View {
     let additions: TripArchive.Additions
     let busy: Bool
+    /// Other words for the same list (a copy of my own trip sent back).
+    var title: String?
+    var text: String?
     let onCancel: () -> Void
     let onAccept: (Set<String>) -> Void
     @State private var chosen: Set<String>
 
-    init(additions: TripArchive.Additions, busy: Bool, onCancel: @escaping () -> Void, onAccept: @escaping (Set<String>) -> Void) {
-        self.additions = additions; self.busy = busy; self.onCancel = onCancel; self.onAccept = onAccept
+    init(additions: TripArchive.Additions, busy: Bool, title: String? = nil, text: String? = nil,
+         onCancel: @escaping () -> Void, onAccept: @escaping (Set<String>) -> Void) {
+        self.additions = additions; self.busy = busy; self.title = title; self.text = text
+        self.onCancel = onCancel; self.onAccept = onAccept
         _chosen = State(initialValue: Set(additions.items.map(\.uuid)))
     }
 
     var body: some View {
-        DialogSheet(symbol: "text.badge.plus", title: "\(additions.from) 的補充", busy: busy, cancelText: "略過全部",
+        DialogSheet(symbol: "text.badge.plus", title: title ?? "\(additions.from) 的補充", busy: busy, cancelText: "略過全部",
                     confirmText: "加入 \(chosen.count) 項", confirmEnabled: !chosen.isEmpty, onCancel: onCancel, onConfirm: { onAccept(chosen) }) {
-            Text("要加入「\(additions.tripName)」的項目打勾。加入後記得再分享一次給大家。")
+            Text(text ?? "要加入「\(additions.tripName)」的項目打勾。加入後記得再分享一次給大家。")
                 .appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
             ForEach(additions.items) { item in
                 let on = chosen.contains(item.uuid)
@@ -239,15 +264,49 @@ private struct PlansPreviewSheet: View {
     let preview: TripArchive.PlansPreview
     let busy: Bool
     let onCancel: () -> Void
-    let onConfirm: () -> Void
+    /// The organizer's name when the new trip is someone else's, nil when it is mine.
+    let onConfirm: (String?) -> Void
+    @State private var others = false
+    @State private var organizer = ""
 
     var body: some View {
         let refused = preview.refused != nil
+        let name = String(organizer.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
         DialogSheet(symbol: "desktopcomputer", title: refused ? "無法併入" : "電腦排的行程", busy: busy,
-                    cancelText: refused ? "知道了" : "取消", confirmText: refused ? nil : "併入", onCancel: onCancel, onConfirm: onConfirm) {
+                    cancelText: refused ? "知道了" : "取消", confirmText: refused ? nil : others ? "匯入" : "併入",
+                    confirmEnabled: !others || !name.isEmpty, onCancel: onCancel, onConfirm: { onConfirm(others ? name : nil) }) {
             Text(preview.tripName).appFont(size: 17, weight: .semibold)
             Text(preview.refused ?? message).appFont(size: 15).foregroundStyle(Palette.onSurfaceVariant)
+            // The trip isn't on this phone yet: is it mine, or am I a companion who got the file by mistake?
+            if !refused, preview.newTrip {
+                Text("這趟旅程是誰記帳?").appFont(size: 16, weight: .semibold).padding(.top, 4)
+                choice("我自己記帳", on: !others) { others = false }
+                choice("別人記帳(我只能看,我的補充傳給他)", on: others) { others = true }
+                if others {
+                    FieldBox("記帳人的名字") {
+                        TextField("", text: $organizer, prompt: Text("例如:小明").foregroundStyle(Palette.textMuted))
+                            .appFont(size: 16)
+                            .onChange(of: organizer) { _, v in if v.count > 20 { organizer = String(v.prefix(20)) } }
+                    }
+                }
+            }
         }
+    }
+
+    private func choice(_ text: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: on ? "largecircle.fill.circle" : "circle").font(.system(size: 20))
+                    .foregroundStyle(on ? Palette.primary : Palette.onSurfaceVariant)
+                Text(text).appFont(size: 16).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(busy)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     private var message: String {
