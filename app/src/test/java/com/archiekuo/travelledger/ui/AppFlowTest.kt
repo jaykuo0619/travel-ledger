@@ -1,5 +1,6 @@
 package com.archiekuo.travelledger.ui
 
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -160,6 +161,31 @@ class AppFlowTest {
         rule.onNodeWithContentDescription("返回").performClick()
         assertTrue(seen("已花 NT$ 500"))
         assertTrue(seen("1 / 1 完成"))
+    }
+
+    @Test fun addAPlanToUnscheduled() {
+        newTrip("大阪")
+        tap("行程")
+        tap("新增行程")
+        assertTrue(seen("景點、餐廳或活動名稱"))
+        // ✓ without a name says what is missing instead of doing nothing.
+        rule.onNodeWithContentDescription("儲存").assertIsEnabled().performClick()
+        assertTrue(seen("請輸入名稱才能儲存"))
+        type(0, "通天閣")
+        rule.waitForIdle()
+        assertTrue("hint goes once there is a name", !present("請輸入名稱才能儲存"))
+        val today = java.time.LocalDate.now()
+        rule.onAllNodesWithText("${today.monthValue}/${today.dayOfMonth}").onFirst().performClick()
+        rule.onAllNodesWithText("待排").onFirst().performClick()
+        rule.onNodeWithContentDescription("儲存").assertIsEnabled().performClick()
+        assertTrue(seen("待排 · 1 項"))
+        assertTrue(seen("通天閣"))
+        // Again from the top button with 待排 already chosen.
+        rule.onAllNodesWithText("新增").onFirst().performClick()
+        assertTrue(seen("景點、餐廳或活動名稱"))
+        type(0, "黑門市場")
+        rule.onNodeWithContentDescription("儲存").assertIsEnabled().performClick()
+        assertTrue(seen("待排 · 2 項"))
     }
 
     @Test fun editAndDeleteAnExpense() {

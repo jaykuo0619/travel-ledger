@@ -61,11 +61,17 @@ fun AppTopBar(
     }
 }
 
-/** Round primary "confirm" button used in editor top bars. */
+/**
+ * Round primary "confirm" button used in editor top bars. With [ready] false it looks unavailable but can still be
+ * tapped, so the screen can say what is missing instead of silently doing nothing.
+ */
 @Composable
-fun ConfirmButton(enabled: Boolean, onClick: () -> Unit) {
+fun ConfirmButton(enabled: Boolean, ready: Boolean = true, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
     FilledIconButton(
         onClick, enabled = enabled, modifier = Modifier.padding(end = 8.dp).size(42.dp),
+        colors = if (ready) IconButtonDefaults.filledIconButtonColors()
+        else IconButtonDefaults.filledIconButtonColors(containerColor = cs.onSurface.copy(alpha = 0.12f), contentColor = cs.onSurface.copy(alpha = 0.38f)),
     ) { Icon(Icons.Rounded.Check, "儲存") }
 }
 

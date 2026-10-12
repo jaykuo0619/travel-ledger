@@ -115,8 +115,8 @@ class NoVerticalTextTest {
         "設定" to { SettingsScreen(AppSettings(myName = "小明"), {}, {}, {}, {}, "0.8.0") },
         "分類管理" to {
             ManageListScreen(
-                "分類管理", categories.map { c -> categoryStyle(c.name, c.icon, c.color).let { ManageItem(c.id, c.name, it.icon, it.color) } },
-                true, "其他", "", {}, { _, _, _ -> }, { _, _, _, _ -> }, {}, { _, _ -> },
+                "分類管理", categories.map { c -> categoryStyle(c.name, c.icon, c.color).let { ManageItem(c.id, c.name, it.icon, it.color, deletable = c.name == "飲料") } },
+                true, "基礎分類不能刪除,可以改名;自己新增的可以刪除。", { "" }, {}, { _, _, _ -> }, { _, _, _, _ -> }, {}, { _, _ -> },
             )
         },
     )
@@ -211,6 +211,15 @@ class NoVerticalTextDialogTest {
             ),
             false, {}, {},
         )
+    }
+    @Test fun ownTripBackDialog() = dialog("傳回的旅程") {
+        ReviewAdditionsDialog(
+            TripArchive.Additions("u", name, "小美", listOf(TripArchive.AdditionItem("b", true, "機票", "10/11 · TWD 12,000 · 交通"))),
+            false, {}, {}, ownTripBack = true,
+        )
+    }
+    @Test fun plansImportDialog() = dialog("電腦排的行程") {
+        PlansImportDialog(TripArchive.PlansPreview(name, newTrip = true, added = 12, updated = 0, deleted = 0), false, {}, {})
     }
     @Test fun splitDialog() = dialog("拆成多個行程") {
         SplitNoteDialog(

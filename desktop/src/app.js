@@ -1,7 +1,7 @@
 // 卡溜趴行程桌 — plan trips on a computer, then send them to the phone as a file.
 // Everything stays in this browser (IndexedDB); files move between the computer and the phone through LINE or similar.
 (() => {
-  const APP_VERSION = "1.0";
+  const APP_VERSION = "1.4";
   const FORMAT = "travelledger";
   const DEFAULT_CATEGORIES = ["吃", "交通", "購物", "住宿", "景點", "其他"];
   const CATEGORY_LOOK = {
@@ -37,14 +37,90 @@
     r.onerror = () => bad(r.error);
   });
 
-  const state = { trips: [], current: null, selectedDay: UNSCHEDULED, editing: null, dragging: null };
+  const state = { trips: [], current: null, selectedDay: UNSCHEDULED, editing: null, noteDay: null, dragging: null };
   const trip = () => state.trips.find((t) => t.uuid === state.current) || null;
   let saveTimer = null;
+  // Changed trips wait a moment (typing), then are written together. Every changed trip is kept, even when
+  // another trip is changed before the write.
+  const unsaved = new Map();
   function save(t = trip()) {
     if (!t) return;
     t.updatedAt = Date.now();
+    unsaved.set(t.uuid, t);
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => idb("readwrite", (s) => s.put(t)), 250);
+    saveTimer = setTimeout(flush, 250);
+  }
+  async function flush() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    const list = [...unsaved.values()];
+    unsaved.clear();
+    if (!list.length) return;
+    await idb("readwrite", (s) => list.forEach((t) => s.put(t)));
+    announce();
+  }
+
+  // ── the page open in more than one tab or window: each one follows what the others save ──
+  const channel = "BroadcastChannel" in window ? new BroadcastChannel("kalupa-planner") : null;
+  const announce = () => channel?.postMessage("saved");
+  const signature = (trips) => trips.map((t) => `${t.uuid}:${t.updatedAt}`).sort().join("|");
+  async function reloadFromStorage() {
+    if (!db || unsaved.size) return; // our own change is about to be written
+    const trips = (await idb("readonly", (s) => s.getAll())) || [];
+    if (unsaved.size || signature(trips) === signature(state.trips)) return;
+    state.trips = trips;
+    if (!trips.some((t) => t.uuid === state.current)) state.current = trips[0]?.uuid || null;
+    // Steps recorded here are from before the other tab's change; undoing them would overwrite it.
+    history.undo = [];
+    history.redo = [];
+    history.field = null;
+    updateUndoButtons();
+    render();
+    if (state.editing) { if (editingPlan()) renderEditor(); else closeEditor(); }
+    if (state.noteDay != null) renderNoteEditor();
+  }
+  channel?.addEventListener("message", reloadFromStorage);
+  window.addEventListener("focus", reloadFromStorage);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); else reloadFromStorage(); });
+  window.addEventListener("pagehide", flush);
+
+  // ── undo / redo: a snapshot of every trip before each change (pictures are blobs, copied by reference) ──
+  const MAX_UNDO = 100;
+  const history = { undo: [], redo: [], field: null };
+  const snapshot = () => ({ trips: structuredClone(state.trips), current: state.current });
+  /** Call before changing anything. Typing in one field counts as one step until the field is left. */
+  function checkpoint(field = null) {
+    if (field && history.field === field) return;
+    history.field = field;
+    history.undo.push(snapshot());
+    if (history.undo.length > MAX_UNDO) history.undo.shift();
+    history.redo = [];
+    updateUndoButtons();
+  }
+  async function restore(from, to) {
+    if (!from.length) return false;
+    to.push(snapshot());
+    const snap = from.pop();
+    clearTimeout(saveTimer);
+    unsaved.clear();
+    state.trips = structuredClone(snap.trips);
+    state.current = state.trips.some((t) => t.uuid === snap.current) ? snap.current : state.trips[0]?.uuid || null;
+    if (state.current) localStorage.setItem("current", state.current);
+    history.field = null;
+    await idb("readwrite", (s) => { s.clear(); state.trips.forEach((t) => s.put(t)); });
+    announce();
+    render();
+    if (state.editing) { if (editingPlan()) renderEditor(); else closeEditor(); }
+    if (state.noteDay != null) renderNoteEditor();
+    updateUndoButtons();
+    return true;
+  }
+  const undo = async () => { if (!(await restore(history.undo, history.redo))) toast("沒有可以復原的步驟"); };
+  const redo = async () => { if (!(await restore(history.redo, history.undo))) toast("沒有可以重做的步驟"); };
+  function updateUndoButtons() {
+    const u = $("#btn-undo"), r = $("#btn-redo");
+    if (u) u.disabled = !history.undo.length;
+    if (r) r.disabled = !history.redo.length;
   }
 
   // ── categories ──
@@ -73,27 +149,38 @@
     };
   }
   const sortPlans = (a, b) => (a.minuteOfDay ?? 1e9) - (b.minuteOfDay ?? 1e9) || a.createdAt - b.createdAt;
-  function addPlans(list, day) {
+  function addPlans(list, day, step = true) {
     const t = trip();
+    if (step) checkpoint();
     list.forEach((p, i) => t.plans.push(newPlan({ ...p, date: day, createdAt: Date.now() + i })));
     save();
     render();
   }
   function deletePlan(p) {
     const t = trip();
+    checkpoint();
     t.plans = t.plans.filter((x) => x !== p);
     if (!t.deleted.includes(p.uuid)) t.deleted.push(p.uuid); // so the phone removes it too
     save();
   }
 
   // ── toast ──
-  function toast(msg, ms = 2600) {
+  function toast(msg, ms = 2600, action = null) {
+    document.querySelectorAll(".toast").forEach((x) => x.remove());
     const el = document.createElement("div");
     el.className = "toast";
     el.textContent = msg;
+    if (action) {
+      const b = document.createElement("button");
+      b.className = "toast-action";
+      b.textContent = action.label;
+      b.onclick = () => { el.remove(); action.run(); };
+      el.append(b);
+    }
     document.body.append(el);
     setTimeout(() => el.remove(), ms);
   }
+  const undoToast = (msg) => toast(msg, 8000, { label: "復原", run: undo });
 
   // ── links in text ──
   const LINK = /(https?:\/\/[^\s()<>"⺀-鿿가-힯＀-￯]+|www\.[^\s()<>"⺀-鿿가-힯＀-￯]+)/g;
@@ -136,7 +223,7 @@
       : `<span class="day">Day ${day - t.startDate + 1}</span><span class="date">${shortDate(day)}</span>`;
     return `<section class="col ${state.selectedDay === day ? "selected" : ""}" data-day="${key}">
       <div class="col-head">${head}<span class="count">${plans.length} 項</span></div>
-      <div class="daynote ${note ? "" : "empty"}" data-note="${key}">${note ? `<span class="label">${day === UNSCHEDULED ? "待排筆記" : "當日筆記"}</span>${linkify(note)}` : "＋ 寫筆記"}</div>
+      <div class="daynote ${note ? "" : "empty"}" data-note="${key}">${note ? `<span class="label">${day === UNSCHEDULED ? "待排筆記" : "當日筆記"}<span class="edit">✎ 修改</span></span>${linkify(note)}` : "＋ 寫筆記"}</div>
       ${plans.map(cardHtml).join("")}
       <div class="add"><textarea placeholder="＋ 新增行程(可貼上多行)" data-add="${key}"></textarea></div>
     </section>`;
@@ -172,13 +259,68 @@
 
   // ───────────────────────── editor drawer ─────────────────────────
   function openEditor(p) {
+    state.noteDay = null;
     state.editing = p.uuid;
     renderEditor();
   }
   function closeEditor() {
     state.editing = null;
+    state.noteDay = null;
     $("#drawer")?.remove();
     render();
+  }
+
+  // ── day note: edited in the same big drawer as a plan, saved as you type ──
+  function openNoteEditor(key) {
+    state.editing = null;
+    state.noteDay = key;
+    renderNoteEditor(true);
+  }
+  function closeNoteEditor() {
+    const key = state.noteDay;
+    const before = state.noteBefore;
+    closeEditor();
+    if (key != null && before && !(trip()?.dayNotes[key])) undoToast("已清除筆記");
+  }
+  function renderNoteEditor(opening = false) {
+    const t = trip();
+    const key = state.noteDay;
+    $("#drawer")?.remove();
+    if (!t || key == null) return;
+    const day = key === "u" ? null : +key;
+    const text = t.dayNotes[key] || "";
+    if (opening) state.noteBefore = text;
+    const title = day == null ? "待排筆記" : `Day ${day - t.startDate + 1} · ${shortDate(day)} 當日筆記`;
+    const el = document.createElement("aside");
+    el.className = "drawer";
+    el.id = "drawer";
+    el.innerHTML = `
+      <header><b>${esc(title)}</b>
+        <button class="icon-btn" id="nd-close" title="關閉">✕</button>
+      </header>
+      <div class="scroll note-scroll">
+        <textarea id="nd-text" class="note-text" placeholder="例如:今天早點出門、記得帶護照…">${esc(text)}</textarea>
+        <div class="links" id="nd-links"></div>
+        <p class="note-help">打字就會存好。清空就是刪除這則筆記;改錯可以按上方「↶ 復原」。</p>
+      </div>
+      <footer class="drawer-foot"><button class="btn primary" id="nd-done">完成</button></footer>`;
+    document.body.append(el);
+    const ta = $("#nd-text", el);
+    const links = () => {
+      $("#nd-links", el).innerHTML = linksIn(ta.value).map((u) => `<a class="btn small" href="${u.startsWith("www.") ? "https://" + u : u}" target="_blank" rel="noopener">↗ 開啟 ${esc(u.replace(/^https?:\/\//, "").split("/")[0])}</a>`).join("");
+    };
+    links();
+    ta.addEventListener("input", () => {
+      checkpoint("note:" + key);
+      trip().dayNotes[key] = ta.value.trim(); // "" is sent so the phone clears it too
+      save();
+      render();
+      links();
+    });
+    ta.addEventListener("blur", () => { history.field = null; });
+    $("#nd-close", el).addEventListener("click", closeNoteEditor);
+    $("#nd-done", el).addEventListener("click", closeNoteEditor);
+    if (opening) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
   }
   function editingPlan() { return trip()?.plans.find((p) => p.uuid === state.editing) || null; }
 
@@ -233,20 +375,21 @@
     const bind = (id, ev, fn) => $(id, el).addEventListener(ev, fn);
     const changed = (rerender = false) => { save(); render(); if (rerender) renderEditor(); };
     bind("#ed-close", "click", closeEditor);
-    bind("#ed-delete", "click", () => { if (confirm(`刪除「${p.title || "未命名"}」?`)) { deletePlan(p); closeEditor(); } });
-    bind("#ed-title", "input", (e) => { p.title = e.target.value; changed(); });
-    bind("#ed-category", "change", (e) => { p.category = e.target.value || null; changed(); });
-    bind("#ed-day", "change", (e) => { p.date = e.target.value === "u" ? null : +e.target.value; changed(); });
-    bind("#ed-time", "change", (e) => { p.minuteOfDay = parseTime(e.target.value); changed(); });
-    bind("#ed-status", "change", (e) => { p.status = e.target.value; changed(); });
-    bind("#ed-reservation", "change", (e) => { p.reservation = e.target.value; changed(true); });
-    bind("#ed-res-note", "change", (e) => { p.reservationNote = e.target.value; changed(true); });
-    bind("#ed-location", "change", (e) => { p.location = e.target.value.trim(); changed(true); });
-    bind("#ed-note", "change", (e) => { p.note = e.target.value; changed(true); });
+    bind("#ed-delete", "click", () => { deletePlan(p); closeEditor(); undoToast(`已刪除「${p.title || "未命名"}」`); });
+    bind("#ed-title", "input", (e) => { checkpoint("title:" + p.uuid); p.title = e.target.value; changed(); });
+    bind("#ed-title", "blur", () => { history.field = null; });
+    bind("#ed-category", "change", (e) => { checkpoint(); p.category = e.target.value || null; changed(); });
+    bind("#ed-day", "change", (e) => { checkpoint(); p.date = e.target.value === "u" ? null : +e.target.value; changed(); });
+    bind("#ed-time", "change", (e) => { checkpoint(); p.minuteOfDay = parseTime(e.target.value); changed(); });
+    bind("#ed-status", "change", (e) => { checkpoint(); p.status = e.target.value; changed(); });
+    bind("#ed-reservation", "change", (e) => { checkpoint(); p.reservation = e.target.value; changed(true); });
+    bind("#ed-res-note", "change", (e) => { checkpoint(); p.reservationNote = e.target.value; changed(true); });
+    bind("#ed-location", "change", (e) => { checkpoint(); p.location = e.target.value.trim(); changed(true); });
+    bind("#ed-note", "change", (e) => { checkpoint(); p.note = e.target.value; changed(true); });
     bind("#ed-pics", "change", async (e) => { await attachPictures(p, [...e.target.files]); });
     el.addEventListener("click", (e) => {
       const rm = e.target.closest("[data-remove-pic]");
-      if (rm) { p.photos = p.photos.filter((x) => x.id !== rm.dataset.removePic); changed(true); return; }
+      if (rm) { checkpoint(); p.photos = p.photos.filter((x) => x.id !== rm.dataset.removePic); changed(true); undoToast("已移除圖片"); return; }
       const pic = e.target.closest("[data-pic]");
       if (pic) showLightbox(picUrl(p.photos.find((x) => x.id === pic.dataset.pic)));
     });
@@ -260,7 +403,8 @@
     });
   }
 
-  async function attachPictures(p, files) {
+  async function attachPictures(p, files, step = true) {
+    if (step) checkpoint();
     for (const f of files.filter((f) => f.type.startsWith("image/"))) {
       if (p.photos.length >= 9) { toast("一個行程最多 9 張圖片"); break; }
       p.photos.push(await toPicture(f));
@@ -309,6 +453,7 @@
         const end = toEpochDay($("#tr-end", root).value);
         if (!name) return toast("請輸入旅程名稱");
         if (end < start) return toast("回程不能早於出發");
+        checkpoint();
         if (existing) Object.assign(existing, { name, startDate: start, endDate: end });
         else {
           const nt = { uuid: uuid(), name, startDate: start, endDate: end, navApp: null, plans: [], dayNotes: {}, deleted: [], categories: [], updatedAt: Date.now() };
@@ -322,12 +467,15 @@
       };
       const del = $("#tr-delete", root);
       if (del) del.onclick = async () => {
-        if (!confirm(`從這台電腦刪除「${existing.name}」?手機上的不受影響。`)) return;
+        checkpoint();
         state.trips = state.trips.filter((x) => x !== existing);
+        unsaved.delete(existing.uuid);
         await idb("readwrite", (s) => s.delete(existing.uuid));
+        announce();
         state.current = state.trips[0]?.uuid || null;
         close();
         render();
+        undoToast(`已刪除「${existing.name}」(手機上的不受影響)`);
       };
     });
   }
@@ -366,13 +514,14 @@
           category: $(`[data-cat="${i}"]`, root).value || null,
           location: it.location,
         })).filter((x) => x.on && x.title).map(({ on, ...rest }) => rest);
+        checkpoint();
         if ($("#sp-keep", root).checked) {
           const key = target === UNSCHEDULED ? "u" : String(target);
           trip().dayNotes[key] = [trip().dayNotes[key], text.trim()].filter(Boolean).join("\n\n");
         }
         close();
-        addPlans(chosen, target);
-        toast(`已建立 ${chosen.length} 個行程`);
+        addPlans(chosen, target, false);
+        undoToast(`已建立 ${chosen.length} 個行程`);
       };
     });
   }
@@ -427,6 +576,7 @@
       <ol><li>打開 <b>LINE 電腦版</b>,把剛下載的檔案傳給自己(或傳到 Keep)。</li>
       <li>在手機的 LINE 點這個檔案 →「用其他應用程式開啟」→ 選<b>卡溜趴</b>。</li>
       <li>確認後按「<b>併入</b>」。同一個行程會更新,不會重複;帳目不受影響。</li></ol>
+      <p class="warn-note">⚠ 這個檔案是給<b>記帳人自己的手機</b>。要給同伴看,請在記帳人的手機上打開旅程 → 右上角 ⋮ →「<b>分享給同伴</b>」傳到群組;同伴有補充時,在旅程上方按「傳給記帳人」。</p>
       <div class="actions"><button class="btn primary" id="ok">知道了</button></div>`, (root, close) => { $("#ok", root).onclick = close; });
   }
 
@@ -472,9 +622,12 @@
     (root, close) => {
       $("#no", root).onclick = close;
       $("#yes", root).onclick = async () => {
+        checkpoint();
         for (const t of incoming) {
           state.trips = state.trips.filter((x) => x.uuid !== t.uuid).concat(t);
+          unsaved.delete(t.uuid);
           await idb("readwrite", (s) => s.put(t));
+          announce();
         }
         state.current = incoming[0].uuid;
         localStorage.setItem("current", state.current);
@@ -492,21 +645,7 @@
     const card = e.target.closest("[data-plan]");
     if (card && !e.target.closest("a")) { openEditor(trip().plans.find((p) => p.uuid === card.dataset.plan)); return; }
     const note = e.target.closest("[data-note]");
-    if (note && !e.target.closest("a") && !note.querySelector("textarea")) {
-      const key = note.dataset.note;
-      note.className = "daynote";
-      note.innerHTML = `<span class="label">${key === "u" ? "待排筆記" : "當日筆記"}</span><textarea>${esc(trip().dayNotes[key] || "")}</textarea>`;
-      const ta = note.querySelector("textarea");
-      ta.focus();
-      ta.addEventListener("blur", () => {
-        const text = ta.value.trim();
-        if (text) trip().dayNotes[key] = text;
-        else trip().dayNotes[key] = ""; // sent as "" so the phone clears it too
-        save();
-        render();
-      });
-      return;
-    }
+    if (note && !e.target.closest("a")) { openNoteEditor(note.dataset.note); return; }
     const col = e.target.closest(".col");
     if (col) {
       state.selectedDay = dayOf(col.dataset.day);
@@ -515,6 +654,15 @@
   });
 
   document.addEventListener("keydown", (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    const typing = e.target.closest?.("input, textarea, select");
+    // Inside a field the browser undoes the typing itself; elsewhere it is a step of the whole planner.
+    if (mod && !typing && !$(".backdrop") && (key === "z" || key === "y")) {
+      e.preventDefault();
+      if (key === "y" || e.shiftKey) redo(); else undo();
+      return;
+    }
     const ta = e.target.closest?.("[data-add]");
     if (ta && e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -528,7 +676,7 @@
         addPlans([it || { title: text }], day);
       }
     }
-    if (e.key === "Escape") { if ($(".lightbox")) $(".lightbox").remove(); else if ($(".backdrop")) $(".backdrop").remove(); else if (state.editing) closeEditor(); }
+    if (e.key === "Escape") { if ($(".lightbox")) $(".lightbox").remove(); else if ($(".backdrop")) $(".backdrop").remove(); else if (state.noteDay != null) closeNoteEditor(); else if (state.editing) closeEditor(); }
   });
 
   document.addEventListener("paste", async (e) => {
@@ -538,11 +686,13 @@
     const field = e.target.closest?.("input, textarea");
     if (images.length) {
       e.preventDefault();
+      if (state.noteDay != null) return toast("筆記不能放圖片,請放在行程裡");
       const editing = editingPlan();
       if (editing) return attachPictures(editing, images);
+      checkpoint();
       const p = newPlan({ title: "截圖", date: state.selectedDay, createdAt: Date.now() });
       t.plans.push(p);
-      await attachPictures(p, images);
+      await attachPictures(p, images, false);
       openEditor(p);
       return;
     }
@@ -596,7 +746,10 @@
     if (planId) {
       if (!col) return;
       const p = t.plans.find((x) => x.uuid === planId);
-      p.date = dayOf(col.dataset.day);
+      const day = dayOf(col.dataset.day);
+      if (p.date === day) return;
+      checkpoint();
+      p.date = day;
       save();
       render();
       return;
@@ -605,9 +758,10 @@
     if (images.length) {
       if (card) return attachPictures(t.plans.find((x) => x.uuid === card.dataset.plan), images);
       if (!col) return;
+      checkpoint();
       const p = newPlan({ title: "截圖", date: dayOf(col.dataset.day), createdAt: Date.now() });
       t.plans.push(p);
-      await attachPictures(p, images);
+      await attachPictures(p, images, false);
       openEditor(p);
       return;
     }
@@ -623,6 +777,8 @@
   // ── top bar ──
   $("#trip-select").addEventListener("change", (e) => { state.current = e.target.value; localStorage.setItem("current", state.current); closeEditor(); });
   $("#btn-new").addEventListener("click", () => tripDialog(null));
+  $("#btn-undo").addEventListener("click", undo);
+  $("#btn-redo").addEventListener("click", redo);
   $("#btn-settings").addEventListener("click", () => tripDialog(trip()));
   $("#btn-export").addEventListener("click", exportTrip);
   $("#file-input").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) openFile(f); });
@@ -637,6 +793,7 @@
     state.trips = (await idb("readonly", (s) => s.getAll())) || [];
     state.current = state.trips.find((t) => t.uuid === localStorage.getItem("current"))?.uuid || state.trips[0]?.uuid || null;
     render();
+    updateUndoButtons();
     window.__ready = true;
   })();
 })();

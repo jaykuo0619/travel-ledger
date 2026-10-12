@@ -97,12 +97,74 @@ await page.locator("#drawer a", { hasText: "usj.co.jp" }).waitFor();
 await shot("03-editor");
 await page.locator("#ed-close").click();
 
-// Day note on Day 3.
+// Day note on Day 3: opens in the big drawer, saved as you type.
 await col("Day 3").locator("[data-note]").click();
-await col("Day 3").locator("[data-note] textarea").fill("搭 JR 到京都");
-await page.locator(".brand").click(); // blur saves
+await page.locator("#nd-text").fill("搭 JR 到京都 https://www.jr-odekake.net");
+await page.locator("#nd-links a", { hasText: "jr-odekake.net" }).waitFor();
+await col("Day 3").locator(".daynote", { hasText: "搭 JR 到京都" }).waitFor(); // the board follows while typing
+await shot("04a-day-note");
+await page.locator("#nd-done").click();
+await page.locator("#drawer").waitFor({ state: "detached" });
+// Edit it again (✎ 修改; tapping the link itself opens the link): the drawer opens with the text; Esc closes and keeps it.
+await col("Day 3").locator("[data-note] .edit").click();
+assert.equal(await page.locator("#nd-text").inputValue(), "搭 JR 到京都 https://www.jr-odekake.net");
+await page.locator("#nd-text").fill("搭 JR 到京都");
+await page.keyboard.press("Escape");
+await page.locator("#drawer").waitFor({ state: "detached" });
+await col("Day 3").locator(".daynote", { hasText: /^當日筆記✎ 修改搭 JR 到京都$/ }).waitFor();
+// Clearing it deletes the note; the toast brings it back.
+await col("Day 3").locator("[data-note]").click();
+await page.locator("#nd-text").fill("");
+await page.locator("#nd-close").click();
+await col("Day 3").locator(".daynote.empty").waitFor();
+await page.locator(".toast-action", { hasText: "復原" }).click();
 await col("Day 3").locator(".daynote", { hasText: "搭 JR 到京都" }).waitFor();
 await shot("04-board");
+
+// ── Undo / redo: every change is one step, Ctrl+Z / Ctrl+Y outside fields, or the buttons. ──
+const usjCard = (label) => col(label).locator(".card", { hasText: "環球影城" });
+const press = async (keys) => { await page.locator(".brand").click(); await page.keyboard.press(keys); };
+await usjCard("Day 1").dragTo(col("Day 3"));
+await usjCard("Day 3").waitFor();
+await press("Control+z");
+await usjCard("Day 1").waitFor();
+await press("Control+y");
+await usjCard("Day 3").waitFor();
+await page.getByRole("button", { name: "↶ 復原" }).click();
+await usjCard("Day 1").waitFor();
+assert.equal(await page.getByRole("button", { name: "↷ 重做" }).isEnabled(), true);
+// Typing a name is one step, however many keys.
+await usjCard("Day 1").click();
+await page.locator("#ed-title").click();
+await page.keyboard.press("End");
+await page.locator("#ed-title").pressSequentially(" 快速通關");
+await page.locator("#ed-close").click();
+await col("Day 1").locator(".card", { hasText: "環球影城 快速通關" }).waitFor();
+await press("Control+z");
+await col("Day 1").locator(".card .title", { hasText: /^環球影城$/ }).waitFor();
+// Ctrl+Z inside a field stays the browser's own typing undo.
+await usjCard("Day 1").click();
+await page.locator("#ed-title").click();
+await page.keyboard.press("End");
+await page.keyboard.type("X");
+await page.keyboard.press("Control+z");
+assert.equal(await page.locator("#ed-title").inputValue(), "環球影城");
+await page.locator("#ed-close").click();
+// Delete asks nothing; the toast brings it back, pictures included.
+await usjCard("Day 1").click();
+await page.locator("#ed-delete").click();
+await usjCard("Day 1").waitFor({ state: "detached" });
+await shot("04b-undo-toast");
+await page.locator(".toast-action", { hasText: "復原" }).click();
+await usjCard("Day 1").click();
+assert.equal(await page.locator("#drawer .pic img").count(), 1);
+await page.locator("#ed-close").click();
+// Deleting the whole trip can be undone too, and the undo is saved.
+await page.getByRole("button", { name: "旅程設定" }).click();
+await page.locator("#tr-delete").click();
+await page.locator(".empty-state").waitFor();
+await press("Control+z");
+await usjCard("Day 1").waitFor();
 
 // Survives a reload (kept in this browser).
 await page.waitForTimeout(400);
@@ -154,8 +216,8 @@ if (!existsSync(phoneFile)) {
   await page.locator("#ed-close").click();
   // Day note on Day 3.
   await col("Day 3").locator("[data-note]").click();
-  await col("Day 3").locator("[data-note] textarea").fill("先換錢再出門");
-  await page.locator(".brand").click();
+  await page.locator("#nd-text").fill("先換錢再出門");
+  await page.locator("#nd-done").click();
   await col("Day 3").locator(".daynote", { hasText: "先換錢再出門" }).waitFor();
   await shot("06-phone-trip-edited");
 
@@ -167,6 +229,27 @@ if (!existsSync(phoneFile)) {
   mkdirSync(path.dirname(roundtrip), { recursive: true });
   writeFileSync(roundtrip, out.buf);
   console.log("wrote", path.relative(root, roundtrip));
+}
+
+// ── 3. The page open twice (e.g. the file double-clicked again): neither tab wipes out the other's plans ──
+{
+  const other = await context.newPage();
+  other.on("pageerror", (e) => errors.push(e.message));
+  await other.goto(page_);
+  await other.waitForFunction(() => window.__ready === true);
+  const colIn = (p, label) => p.locator(".col").filter({ has: p.locator(".col-head", { hasText: label }) });
+  await colIn(page, "待排").locator("textarea[data-add]").fill("通天閣");
+  await colIn(page, "待排").locator("textarea[data-add]").press("Enter");
+  await colIn(other, "待排").locator(".card", { hasText: "通天閣" }).waitFor(); // the other tab follows
+  await colIn(other, "Day 1").locator("textarea[data-add]").fill("梅田藍天大廈");
+  await colIn(other, "Day 1").locator("textarea[data-add]").press("Enter");
+  await colIn(page, "Day 1").locator(".card", { hasText: "梅田藍天大廈" }).waitFor();
+  await other.waitForTimeout(400);
+  await page.reload();
+  await page.waitForFunction(() => window.__ready === true);
+  await colIn(page, "待排").locator(".card", { hasText: "通天閣" }).waitFor();
+  await colIn(page, "Day 1").locator(".card", { hasText: "梅田藍天大廈" }).waitFor();
+  await other.close();
 }
 
 assert.deepEqual(errors, [], "no script errors");

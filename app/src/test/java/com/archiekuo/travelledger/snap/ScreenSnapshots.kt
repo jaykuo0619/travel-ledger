@@ -117,6 +117,13 @@ class ScreenSnapshots {
         )
     }
 
+    @Test fun expenseCalc() = both("expenseCalc") {
+        ExpenseEditScreen(
+            EditState(title = "烤肉 3 人", amount = "12800+2400×2", currency = "JPY", rate = "0.21", categoryId = 1, paymentId = 2, date = d(6, 12), minuteOfDay = 19 * 60),
+            true, categories, methods, emptyList(), emptyList(), listOf("TWD", "JPY"), null, false, ExpenseActions(),
+        )
+    }
+
     @Test fun expenseReceipt() = both("expenseReceipt") {
         ExpenseEditScreen(
             editState.copy(title = "", amount = ""), true, categories, methods,
@@ -157,8 +164,8 @@ class ScreenSnapshots {
     @Test fun categories() = both("categories") {
         ManageListScreen(
             "分類管理",
-            categories.map { c -> categoryStyle(c.name, c.icon, c.color).let { ManageItem(c.id, c.name, it.icon, it.color) } },
-            true, "其他", "", {}, { _, _, _ -> }, { _, _, _, _ -> }, {}, { _, _ -> },
+            categories.map { c -> categoryStyle(c.name, c.icon, c.color).let { ManageItem(c.id, c.name, it.icon, it.color, deletable = c.name == "飲料") } },
+            true, "基礎分類不能刪除,可以改名;自己新增的可以刪除。", { "" }, {}, { _, _, _ -> }, { _, _, _, _ -> }, {}, { _, _ -> },
         )
     }
 
