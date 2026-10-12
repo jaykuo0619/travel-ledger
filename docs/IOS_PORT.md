@@ -5,6 +5,8 @@
 
 ## 0. 先讀這裡
 
+- **iPhone 1.0.0 之後 Android 又改了的項目,清單在 `docs/IOS_TODO.md`**(每項都指回本文件的對應段落)。
+
 - **目標**:做出和 Android 版功能一致的 iPhone app,並且**能和 Android 版互傳檔案**(分享旅程、同伴補充、備份還原、電腦行程桌的檔案)。檔案相容是第一優先,畫面可以照 iOS 的習慣做。
 - **Android 版是規格的來源**。行為有疑問時,以 `app/src/main/java/com/archiekuo/travelledger/` 的程式為準,其次是 `docs/SPEC.md`、使用說明書 `docs/manual/manual.html`(也有 PDF)。
 - **程式放在 `ios/`**(Xcode 專案)。不要改 `app/`、`desktop/`、`compat/fixtures/`;檔案格式需要改時先停下來問,因為 Android 和桌面網頁也要一起改。
