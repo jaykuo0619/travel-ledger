@@ -160,7 +160,7 @@ struct ShareView: View {
         let who = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if needsName { model.settings.myName = String(who.prefix(20)) }
         let archive = model.archive
-        let version = model.appVersion
+        let version = "ios-" + model.appVersion // which side made the file; nothing reads it
         let photos = includePhotos
         let target = target
         let organizer = tripId.flatMap { id in (model.read { try Q.trip($0, id) } ?? nil)?.sharedBy } ?? ""

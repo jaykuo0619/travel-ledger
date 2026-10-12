@@ -62,7 +62,7 @@ fun AppNav(db: AppDatabase, settings: AppSettings, onSettings: (AppSettings) -> 
     /** Navigate with the trip's chosen map app. */
     fun openMap(trip: Trip?, title: String, location: String) = MapLauncher.open(context, NavApp.of(trip?.navApp), title, location)
 
-    ImportHost(db) { id ->
+    ImportHost(db, settings.deleteImportedFile) { id ->
         if (id != null) nav.navigate("trip/$id") { popUpTo("trips") }
         else if (!nav.popBackStack("trips", inclusive = false)) nav.navigate("trips")
     }
@@ -310,11 +310,11 @@ fun AppNav(db: AppDatabase, settings: AppSettings, onSettings: (AppSettings) -> 
                 title = "分類管理",
                 items = items.map { c ->
                     val st = categoryStyle(c.name, c.icon, c.color)
-                    ManageItem(c.id, c.name, st.icon, st.color, c.icon, c.color)
+                    ManageItem(c.id, c.name, st.icon, st.color, c.icon, c.color, deletable = c.builtIn == null)
                 },
                 styleEditable = true,
-                protectedName = "其他",
-                deleteHint = "使用此分類的支出會改歸「其他」。",
+                builtInNote = "基礎分類不能刪除,可以改名;自己新增的可以刪除。",
+                deleteHint = vm::categoryDeleteHint,
                 onBack = { nav.popBackStack() },
                 onAdd = { n, i, c -> vm.addCategory(n, i, c) },
                 onUpdate = { id, n, i, c -> vm.updateCategory(id, n, i, c) },
@@ -327,10 +327,10 @@ fun AppNav(db: AppDatabase, settings: AppSettings, onSettings: (AppSettings) -> 
             val items by vm.methods.collectAsStateWithLifecycle()
             ManageListScreen(
                 title = "付款方式管理",
-                items = items.map { m -> ManageItem(m.id, m.name, paymentIcon(m.name), Palette[0]) },
+                items = items.map { m -> ManageItem(m.id, m.name, paymentIcon(m.name), Palette[0], deletable = m.builtIn == null) },
                 styleEditable = false,
-                protectedName = null,
-                deleteHint = "使用此付款方式的支出會變成未指定。",
+                builtInNote = "基礎付款方式不能刪除,可以改名;自己新增的可以刪除。",
+                deleteHint = vm::methodDeleteHint,
                 onBack = { nav.popBackStack() },
                 onAdd = { n, _, _ -> vm.addMethod(n) },
                 onUpdate = { id, n, _, _ -> vm.renameMethod(id, n) },
@@ -354,7 +354,7 @@ private fun ExpenseEditRoute(
     var captureMode by rememberSaveable { mutableStateOf(PhotoType.MEMORY) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val f = captureFile?.let(::File)
-        if (ok && f != null) vm.addPhoto(android.net.Uri.fromFile(f), captureMode, cleanup = f) else f?.delete()
+        if (ok && f != null) vm.addPhoto(android.net.Uri.fromFile(f), captureMode, cameraFile = f) else f?.delete()
         captureFile = null
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->

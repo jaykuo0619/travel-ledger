@@ -616,31 +616,96 @@ object TripArchive {
             if (m.optString("kind") != KIND_ADDITIONS) throw BadArchive("這不是補充檔")
             val data = readJson(zip, "data.json")
             val trip = m.getJSONArray("trips").getJSONObject(0)
-            val items = mutableListOf<AdditionItem>()
-            data.getJSONArray("plans").let { a ->
-                for (i in 0 until a.length()) {
-                    val p = a.getJSONObject(i)
-                    val day = p.optLongOrNull("date")?.let { d -> java.time.LocalDate.ofEpochDay(d).let { "${it.monthValue}/${it.dayOfMonth}" } } ?: "待排"
-                    items += AdditionItem(p.getString("uuid"), false, p.getString("title"), "行程 · $day" + (p.optStringOrNull("category")?.let { " · $it" } ?: ""))
-                }
-            }
-            data.getJSONArray("expenses").let { a ->
-                for (i in 0 until a.length()) {
-                    val e = a.getJSONObject(i)
-                    val day = java.time.LocalDate.ofEpochDay(e.getLong("date")).let { "${it.monthValue}/${it.dayOfMonth}" }
-                    val amount = java.text.NumberFormat.getNumberInstance().apply { maximumFractionDigits = 2 }.format(e.getDouble("amount"))
-                    items += AdditionItem(
-                        e.getString("uuid"), true, e.optString("title").ifBlank { e.optString("category", "支出") },
-                        "$day · ${e.getString("currency")} $amount" + (e.optStringOrNull("category")?.let { " · $it" } ?: ""),
-                    )
-                }
-            }
+            val items = listItems(data.getJSONArray("plans"), data.getJSONArray("expenses")) { true }
             Additions(data.getString("tripUuid"), trip.getString("name"), m.optString("sharedBy", "同伴"), items)
         }
     } catch (e: BadArchive) {
         throw e
     } catch (e: Exception) {
         throw BadArchive("檔案損壞,無法讀取")
+    }
+
+    /** Review rows for plan items and expenses (in that order) whose uuid passes [keep]. */
+    private fun listItems(plans: JSONArray, expenses: JSONArray, keep: (String) -> Boolean): List<AdditionItem> {
+        val items = mutableListOf<AdditionItem>()
+        for (i in 0 until plans.length()) {
+            val p = plans.getJSONObject(i)
+            if (!keep(p.getString("uuid"))) continue
+            val day = p.optLongOrNull("date")?.let { d -> java.time.LocalDate.ofEpochDay(d).let { "${it.monthValue}/${it.dayOfMonth}" } } ?: "待排"
+            items += AdditionItem(p.getString("uuid"), false, p.getString("title"), "行程 · $day" + (p.optStringOrNull("category")?.let { " · $it" } ?: ""))
+        }
+        for (i in 0 until expenses.length()) {
+            val e = expenses.getJSONObject(i)
+            if (!keep(e.getString("uuid"))) continue
+            val day = java.time.LocalDate.ofEpochDay(e.getLong("date")).let { "${it.monthValue}/${it.dayOfMonth}" }
+            val amount = java.text.NumberFormat.getNumberInstance().apply { maximumFractionDigits = 2 }.format(e.getDouble("amount"))
+            items += AdditionItem(
+                e.getString("uuid"), true, e.optString("title").ifBlank { e.optString("category", "支出") },
+                "$day · ${e.getString("currency")} $amount" + (e.optStringOrNull("category")?.let { " · $it" } ?: ""),
+            )
+        }
+        return items
+    }
+
+    // ───────────────────────────── my own trip, sent back by someone else ─────────────────────────────
+
+    /** The trip in a shared file that is one of my own trips here (not a copy someone shared with me), if any. */
+    private suspend fun ownTripIn(db: AppDatabase, data: JSONObject): Pair<Trip, JSONObject>? {
+        val trips = data.getJSONArray("trips")
+        for (i in 0 until trips.length()) {
+            val t = trips.getJSONObject(i)
+            val local = db.tripDao().findByUuid(t.getString("uuid")) ?: continue
+            if (!local.readOnly) return local to t
+        }
+        return null
+    }
+
+    /**
+     * Someone sent me a trip file of a trip that is mine here (they shared their copy instead of sending additions,
+     * or their copy was made from my computer file). Lists what their copy has that mine doesn't, to take in like
+     * additions; null when the file is not that.
+     */
+    suspend fun readNewItems(db: AppDatabase, file: File): Additions? = withContext(Dispatchers.IO) {
+        try {
+            ZipFile(file).use { zip ->
+                val m = openManifest(zip)
+                if (m.optString("kind") != KIND_TRIP) return@withContext null
+                val data = readJson(zip, "data.json")
+                val (local, t) = ownTripIn(db, data) ?: return@withContext null
+                val havePlans = db.planDao().uuids(local.id).toSet()
+                val haveExpenses = db.expenseDao().uuids(local.id).toSet()
+                val items = listItems(t.getJSONArray("plans"), t.getJSONArray("expenses")) { it !in havePlans && it !in haveExpenses }
+                Additions(local.uuid, local.name, t.optStringOrNull("sharedBy") ?: m.optStringOrNull("sharedBy") ?: "同伴", items)
+            }
+        } catch (e: BadArchive) {
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Takes in the [accepted] new items from someone's copy of my own trip (see [readNewItems]); mine are left as they are. */
+    suspend fun importNewItems(db: AppDatabase, file: File, filesDir: File, accepted: Set<String>): Result = withContext(Dispatchers.IO) {
+        try {
+            ZipFile(file).use { zip ->
+                val m = openManifest(zip)
+                val data = readJson(zip, "data.json")
+                val (local, t) = ownTripIn(db, data) ?: throw BadArchive("手機上沒有這趟旅程")
+                val from = t.optStringOrNull("sharedBy") ?: m.optStringOrNull("sharedBy") ?: "同伴"
+                fun pick(key: String) = t.getJSONArray(key).let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
+                    .filter { it.getString("uuid") in accepted }
+                    .onEach { o ->
+                        // Their members and plan positions mean nothing here; who added it does.
+                        o.remove("payer"); o.remove("plan"); o.remove("pending")
+                        o.put("addedBy", o.optStringOrNull("addedBy") ?: from)
+                    }
+                addItems(db, zip, local, data, pick("plans"), pick("expenses"), filesDir, KIND_ADDITIONS) // reported like additions
+            }
+        } catch (e: BadArchive) {
+            Result.Failed(e.message ?: "無法讀取檔案")
+        } catch (e: Exception) {
+            Result.Failed("檔案損壞,無法匯入")
+        }
     }
 
     /**
@@ -656,54 +721,52 @@ object TripArchive {
                 val trip = db.tripDao().findByUuid(data.getString("tripUuid"))
                     ?: throw BadArchive("手機上沒有「${m.getJSONArray("trips").getJSONObject(0).getString("name")}」這趟旅程")
                 if (trip.readOnly) throw BadArchive("這是給記帳人(${trip.sharedBy})的補充,請轉傳給他")
-                val haveExpenses = db.expenseDao().uuids(trip.id).toSet()
-                val havePlans = db.planDao().uuids(trip.id).toSet()
-                val plans = data.getJSONArray("plans").let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
-                    .filter { it.getString("uuid") in accepted && it.getString("uuid") !in havePlans }
-                val expenses = data.getJSONArray("expenses").let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
-                    .filter { it.getString("uuid") in accepted && it.getString("uuid") !in haveExpenses }
-
-                val copied = mutableMapOf<String, String>()
-                for (p in plans) {
-                    val photos = p.optJSONArray("photos") ?: continue
-                    for (k in 0 until photos.length()) {
-                        val name = photos.getJSONObject(k).getString("file")
-                        copyEntry(zip, name, filesDir)?.let { copied[name] = it }
-                    }
-                }
-                for (e in expenses) {
-                    val photos = e.optJSONArray("photos") ?: continue
-                    for (k in 0 until photos.length()) {
-                        val name = photos.getJSONObject(k).getString("file")
-                        copyEntry(zip, name, filesDir)?.let { copied[name] = it }
-                    }
-                }
-                try {
-                    db.withTransaction {
-                        val categoryIds = mergeCategories(db, data.optJSONArray("categories"))
-                        val paymentIds = mergePayments(db, data.optJSONArray("payments"))
-                        val from = m.optString("sharedBy", "同伴")
-                        for (p in plans) {
-                            p.put("addedBy", p.optStringOrNull("addedBy") ?: from).remove("pending")
-                        }
-                        for (e in expenses) {
-                            e.put("addedBy", e.optStringOrNull("addedBy") ?: from).remove("pending")
-                        }
-                        val t = JSONObject().put("members", JSONArray()).put("rates", JSONArray())
-                            .put("plans", JSONArray(plans)).put("expenses", JSONArray(expenses))
-                        writeContents(db, trip.id, t, categoryIds, paymentIds, copied, keepPending = false, existingPlans = true)
-                    }
-                } catch (e: Exception) {
-                    copied.values.forEach { File(it).delete() }
-                    throw e
-                }
-                Result.Imported(KIND_ADDITIONS, listOf(trip.id), plans.size + expenses.size)
+                val from = m.optString("sharedBy", "同伴")
+                fun pick(key: String) = data.getJSONArray(key).let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
+                    .filter { it.getString("uuid") in accepted }
+                    .onEach { it.put("addedBy", it.optStringOrNull("addedBy") ?: from).remove("pending") }
+                addItems(db, zip, trip, data, pick("plans"), pick("expenses"), filesDir, KIND_ADDITIONS)
             }
         } catch (e: BadArchive) {
             Result.Failed(e.message ?: "無法讀取檔案")
         } catch (e: Exception) {
             Result.Failed("檔案損壞,無法匯入")
         }
+    }
+
+    /**
+     * Adds [plans] and [expenses] (file JSON) to [trip], skipping any it already has (the same file opened twice), with
+     * their pictures. Expenses may link to plan items already in the trip. [data] gives the category and payment names.
+     */
+    private suspend fun addItems(
+        db: AppDatabase, zip: ZipFile, trip: Trip, data: JSONObject, plans: List<JSONObject>, expenses: List<JSONObject>,
+        filesDir: File, kind: String,
+    ): Result {
+        val havePlans = db.planDao().uuids(trip.id).toSet()
+        val haveExpenses = db.expenseDao().uuids(trip.id).toSet()
+        val newPlans = plans.filter { it.getString("uuid") !in havePlans }
+        val newExpenses = expenses.filter { it.getString("uuid") !in haveExpenses }
+        val copied = mutableMapOf<String, String>()
+        for (o in newPlans + newExpenses) {
+            val photos = o.optJSONArray("photos") ?: continue
+            for (k in 0 until photos.length()) {
+                val name = photos.getJSONObject(k).getString("file")
+                copyEntry(zip, name, filesDir)?.let { copied[name] = it }
+            }
+        }
+        try {
+            db.withTransaction {
+                val categoryIds = mergeCategories(db, data.optJSONArray("categories"))
+                val paymentIds = mergePayments(db, data.optJSONArray("payments"))
+                val t = JSONObject().put("members", JSONArray()).put("rates", JSONArray())
+                    .put("plans", JSONArray(newPlans)).put("expenses", JSONArray(newExpenses))
+                writeContents(db, trip.id, t, categoryIds, paymentIds, copied, keepPending = false, existingPlans = true)
+            }
+        } catch (e: Exception) {
+            copied.values.forEach { File(it).delete() }
+            throw e
+        }
+        return Result.Imported(kind, listOf(trip.id), newPlans.size + newExpenses.size)
     }
 
     // ───────────────────────────── plans from the desktop planner ─────────────────────────────
@@ -742,7 +805,11 @@ object TripArchive {
      * not have it yet); each plan item is updated or added by its identity, items deleted on the desktop are
      * deleted here, and the desktop's day notes replace these days' notes. Expenses are never touched.
      */
-    suspend fun importPlans(db: AppDatabase, file: File, filesDir: File): Result = withContext(Dispatchers.IO) {
+    suspend fun importPlans(
+        db: AppDatabase, file: File, filesDir: File,
+        /** When the phone does not have the trip yet and it is someone else's: who keeps its ledger. It then arrives read-only. */
+        organizer: String? = null,
+    ): Result = withContext(Dispatchers.IO) {
         try {
             ZipFile(file).use { zip ->
                 val m = openManifest(zip)
@@ -769,6 +836,8 @@ object TripArchive {
                             Trip(
                                 name = t.getString("name"), startDate = t.getLong("startDate"), endDate = t.getLong("endDate"),
                                 uuid = t.getString("uuid"), navApp = t.optStringOrNull("navApp"),
+                                sharedBy = organizer?.trim()?.ifBlank { null },
+                                sharedAt = organizer?.trim()?.ifBlank { null }?.let { m.optLong("exportedAt", System.currentTimeMillis()) },
                             ),
                         )
                         for (p in plans) {
@@ -822,7 +891,9 @@ object TripArchive {
                     throw e
                 }
                 oldFiles.forEach { File(it).delete() }
-                Result.Imported(KIND_PLANS, listOf(tripId), changed)
+                // A new read-only copy reads like any trip someone shared ("只能看、不能改").
+                if (existing == null && !organizer.isNullOrBlank()) Result.Imported(KIND_TRIP, listOf(tripId), 0)
+                else Result.Imported(KIND_PLANS, listOf(tripId), changed)
             }
         } catch (e: BadArchive) {
             Result.Failed(e.message ?: "無法讀取檔案")

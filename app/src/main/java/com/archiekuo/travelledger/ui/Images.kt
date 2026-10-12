@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,22 +72,42 @@ object PlanPictures {
     }
 }
 
-private object ImageCache : LruCache<String, ImageBitmap>(24)
+/**
+ * Decoded pictures, kept per file *and* size: a 160px list thumbnail must not stand in for the full-screen viewer.
+ * Bounded by memory rather than count, since a full-size picture is ~100 times a thumbnail.
+ */
+internal object ImageCache {
+    private val cache = object : LruCache<String, ImageBitmap>((Runtime.getRuntime().maxMemory() / 8).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()) {
+        override fun sizeOf(key: String, value: ImageBitmap) = value.asAndroidBitmap().byteCount
+    }
+    private fun key(path: String, targetPx: Int) = "$targetPx|$path"
+    fun get(path: String, targetPx: Int): ImageBitmap? = cache.get(key(path, targetPx))
+    fun put(path: String, targetPx: Int, image: ImageBitmap) { cache.put(key(path, targetPx), image) }
+    /** Forgets every size of [path] (the file was deleted or replaced). */
+    fun remove(path: String) { cache.snapshot().keys.filter { it.substringAfter('|') == path }.forEach { cache.remove(it) } }
+}
 
-/** Loads a local image file off the main thread, sampled down to roughly [targetPx] wide. */
+/** How much to shrink a [width]×[height] picture so its shorter side still covers [targetPx] (power of two, as BitmapFactory wants). */
+internal fun sampleSize(width: Int, height: Int, targetPx: Int): Int {
+    val side = minOf(width, height)
+    var sample = 1
+    while (side / (sample * 2) >= targetPx) sample *= 2
+    return sample
+}
+
+/** Loads a local image file off the main thread, sampled down to roughly [targetPx] on its shorter side. */
 @Composable
 fun rememberLocalImage(path: String?, targetPx: Int = 1080): State<ImageBitmap?> =
-    produceState(initialValue = path?.let { ImageCache.get(it) }, path) {
-        if (path == null || value != null) return@produceState
+    produceState(initialValue = path?.let { ImageCache.get(it, targetPx) }, path, targetPx) {
+        if (path == null) { value = null; return@produceState }
+        ImageCache.get(path, targetPx)?.let { value = it; return@produceState }
         value = withContext(Dispatchers.IO) {
             runCatching {
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeFile(path, bounds)
-                var sample = 1
-                while (bounds.outWidth / (sample * 2) >= targetPx) sample *= 2
+                val sample = sampleSize(bounds.outWidth, bounds.outHeight, targetPx)
                 BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
-                    ?.asImageBitmap()?.also { ImageCache.put(path, it) }
+                    ?.asImageBitmap()?.also { ImageCache.put(path, targetPx, it) }
             }.getOrNull()
         }
     }
-

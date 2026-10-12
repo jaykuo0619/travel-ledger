@@ -109,7 +109,17 @@ interface TripDao {
     suspend fun getMembers(tripId: Long): List<Member>
 
     @Query("DELETE FROM member WHERE id = :id")
-    suspend fun deleteMember(id: Long)
+    suspend fun deleteMemberRow(id: Long)
+
+    @Query("UPDATE expense SET payerId = NULL WHERE payerId = :memberId")
+    suspend fun clearPayer(memberId: Long)
+
+    /** A removed member no longer pays for anything: their expenses keep no dangling payer. */
+    @Transaction
+    suspend fun deleteMember(id: Long) {
+        clearPayer(id)
+        deleteMemberRow(id)
+    }
 
     @Update suspend fun updateTrip(trip: Trip)
 
@@ -326,11 +336,29 @@ interface LookupDao {
     @Update suspend fun updateCategories(items: List<Category>)
     @Update suspend fun updatePaymentMethods(items: List<PaymentMethod>)
 
-    @Query("SELECT id FROM category WHERE name = :name LIMIT 1")
-    suspend fun findCategoryId(name: String): Long?
+    @Query("SELECT id FROM category WHERE builtIn = :builtIn LIMIT 1")
+    suspend fun findBuiltInCategoryId(builtIn: String): Long?
+
+    @Query("SELECT * FROM category WHERE id = :id")
+    suspend fun getCategory(id: Long): Category?
+
+    @Query("SELECT * FROM payment_method WHERE id = :id")
+    suspend fun getPaymentMethod(id: Long): PaymentMethod?
+
+    @Query("SELECT COUNT(*) FROM expense WHERE categoryId = :id")
+    suspend fun expensesWithCategory(id: Long): Int
+
+    @Query("SELECT COUNT(*) FROM plan_item WHERE categoryId = :id")
+    suspend fun plansWithCategory(id: Long): Int
+
+    @Query("SELECT COUNT(*) FROM expense WHERE paymentMethodId = :id")
+    suspend fun expensesWithPaymentMethod(id: Long): Int
 
     @Query("UPDATE expense SET categoryId = :to WHERE categoryId = :from")
     suspend fun reassignCategory(from: Long, to: Long?)
+
+    @Query("UPDATE plan_item SET categoryId = :to WHERE categoryId = :from")
+    suspend fun reassignPlanCategory(from: Long, to: Long?)
 
     @Query("DELETE FROM category WHERE id = :id")
     suspend fun deleteCategoryRow(id: Long)
@@ -341,18 +369,29 @@ interface LookupDao {
     @Query("DELETE FROM payment_method WHERE id = :id")
     suspend fun deletePaymentMethodRow(id: Long)
 
-    /** Expenses using the deleted category fall back to "其他" (or no category if that is gone). */
+    /**
+     * Deletes a category the user added; the app's own categories can only be renamed. Expenses and plan items using it
+     * move to 「其他」 (whatever it is called now). Returns false when the category may not be deleted.
+     */
     @Transaction
-    suspend fun deleteCategory(id: Long) {
-        val other = findCategoryId("其他")
-        reassignCategory(id, other?.takeIf { it != id })
+    suspend fun deleteCategory(id: Long): Boolean {
+        val c = getCategory(id) ?: return false
+        if (c.builtIn != null) return false
+        val other = findBuiltInCategoryId(FALLBACK_CATEGORY)
+        reassignCategory(id, other)
+        reassignPlanCategory(id, other)
         deleteCategoryRow(id)
+        return true
     }
 
+    /** Deletes a payment method the user added (expenses using it become 未指定); the app's own ones can only be renamed. */
     @Transaction
-    suspend fun deletePaymentMethod(id: Long) {
+    suspend fun deletePaymentMethod(id: Long): Boolean {
+        val m = getPaymentMethod(id) ?: return false
+        if (m.builtIn != null) return false
         clearPaymentMethod(id)
         deletePaymentMethodRow(id)
+        return true
     }
 }
 

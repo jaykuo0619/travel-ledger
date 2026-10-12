@@ -88,9 +88,12 @@ public struct Category: Codable, Equatable, Identifiable, Sendable, FetchableRec
     public var icon = ""
     /// Palette index; -1 means "guess from the name".
     public var color = -1
+    /// The original name of a built-in category (吃, 交通, … 其他): those can be renamed but not deleted.
+    /// Nil for categories the user added or an import brought. Not written to files.
+    public var builtIn: String?
 
-    public init(id: Int64? = nil, name: String, sortOrder: Int = 0, icon: String = "", color: Int = -1) {
-        self.id = id; self.name = name; self.sortOrder = sortOrder; self.icon = icon; self.color = color
+    public init(id: Int64? = nil, name: String, sortOrder: Int = 0, icon: String = "", color: Int = -1, builtIn: String? = nil) {
+        self.id = id; self.name = name; self.sortOrder = sortOrder; self.icon = icon; self.color = color; self.builtIn = builtIn
     }
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
@@ -100,8 +103,12 @@ public struct PaymentMethod: Codable, Equatable, Identifiable, Sendable, Fetchab
     public var id: Int64?
     public var name: String
     public var sortOrder = 0
+    /// The original name of a built-in payment method (現金, 信用卡, 行動支付); nil for added ones.
+    public var builtIn: String?
 
-    public init(id: Int64? = nil, name: String, sortOrder: Int = 0) { self.id = id; self.name = name; self.sortOrder = sortOrder }
+    public init(id: Int64? = nil, name: String, sortOrder: Int = 0, builtIn: String? = nil) {
+        self.id = id; self.name = name; self.sortOrder = sortOrder; self.builtIn = builtIn
+    }
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
 

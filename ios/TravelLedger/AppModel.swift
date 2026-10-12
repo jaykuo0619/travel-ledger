@@ -232,7 +232,8 @@ final class AppModel {
     }
 
     /// After an import: say what happened, and open the trip when exactly one was written.
-    func finishImport(_ result: TripArchive.Result) {
+    /// [message]: what to say instead of the usual line for that kind of file.
+    func finishImport(_ result: TripArchive.Result, message override: String? = nil) {
         if let file = incoming { try? FileManager.default.removeItem(at: file) }
         incoming = nil
         let original = pickedOriginal
@@ -244,14 +245,17 @@ final class AppModel {
             changed()
             // Only after the import went through; a cancelled or failed import leaves the file alone.
             // A backup is never deleted: it may be the only copy.
-            if settings.deleteImportedFile, kind != TripArchive.kindBackup, let original { Self.deleteOriginal(original) }
-            let message: String
+            var deleted = false
+            if settings.deleteImportedFile, kind != TripArchive.kindBackup, let original { deleted = Self.deleteOriginal(original) }
+            var message: String
             switch kind {
             case TripArchive.kindPlans: message = "已併入電腦排的行程"
             case TripArchive.kindAdditions: message = updated > 0 ? "已加入 \(updated) 項,記得再分享一次給大家" : "這些項目之前已經加入過了"
             case TripArchive.kindTrip: message = updated > 0 ? "已更新同伴分享的旅程" : "已匯入,這趟旅程只能看、不能改"
             default: message = "已還原 \(tripIds.count) 個旅程"
             }
+            if let override { message = override }
+            if deleted { message += "(原檔已刪除)" }
             show(message)
             if tripIds.count == 1 { openTrip(tripIds[0]) } else { closeTrip() }
         }
@@ -264,14 +268,16 @@ final class AppModel {
     }
 
     /// Removes a file the user picked in Files (it may live in another app's storage or in iCloud Drive).
-    private static func deleteOriginal(_ url: URL) {
+    /// False when it could not be removed; that is not an error worth reporting.
+    private static func deleteOriginal(_ url: URL) -> Bool {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         var failure: NSError?
+        var ok = false
         NSFileCoordinator().coordinate(writingItemAt: url, options: .forDeleting, error: &failure) { target in
-            do { try FileManager.default.removeItem(at: target) } catch { print("delete original failed: \(error)") }
+            ok = (try? FileManager.default.removeItem(at: target)) != nil
         }
-        if let failure { print("delete original failed: \(failure)") }
+        return ok && failure == nil
     }
 }
 

@@ -6,6 +6,7 @@ import com.archiekuo.travelledger.logic.PlanParser
 import com.archiekuo.travelledger.ui.EditState
 import com.archiekuo.travelledger.ui.ExpenseEditViewModel
 import com.archiekuo.travelledger.ui.LookupViewModel
+import com.archiekuo.travelledger.ui.PhotoItem
 import com.archiekuo.travelledger.ui.PlanEditViewModel
 import com.archiekuo.travelledger.ui.splitPlan
 import com.archiekuo.travelledger.ui.TripDetailViewModel
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -213,19 +215,79 @@ class LedgerFlowTest {
         assertTrue(runBlocking { db.photoDao().pathsForTrip(trip) }.isEmpty())
     }
 
-    @Test fun deletingACategoryMovesExpensesToOther() {
+    @Test fun onlyAddedCategoriesAndPaymentMethodsCanBeDeleted() {
         val trip = createTrip()
-        record(trip, "晴空塔", "3100", "景點", "信用卡", d(6, 13))
         val lookups = LookupViewModel(db)
-        lookups.deleteCategory(cat("景點"))
-        assertEquals("其他", rows(trip).single().categoryName)
+        // The app's own categories and payment methods stay, even after a rename.
+        runBlocking { db.lookupDao().updateCategories(listOf(db.lookupDao().getCategory(cat("吃"))!!.copy(name = "餐飲"))) }
+        for (name in listOf("餐飲", "景點", "其他")) assertFalse(runBlocking { db.lookupDao().deleteCategory(cat(name)) })
+        assertFalse(runBlocking { db.lookupDao().deletePaymentMethod(pay("信用卡")) })
 
-        // Deleting "其他" itself leaves the expense uncategorised rather than pointing at nothing.
-        lookups.deleteCategory(cat("其他"))
-        assertNull(rows(trip).single().categoryId)
-
-        lookups.deleteMethod(pay("信用卡"))
+        // An added category in use: expenses and plan items both move to 其他 (whatever it is called now).
+        runBlocking { db.lookupDao().updateCategories(listOf(db.lookupDao().getCategory(cat("其他"))!!.copy(name = "雜項"))) }
+        val spa = runBlocking { db.lookupDao().insertCategory(Category(name = "溫泉", sortOrder = 9)) }
+        val suica = runBlocking { db.lookupDao().insertPaymentMethod(PaymentMethod(name = "Suica", sortOrder = 9)) }
+        record(trip, "箱根湯寮", "1800", "溫泉", "Suica", d(6, 13))
+        val plan = runBlocking { db.planDao().insert(PlanItem(tripId = trip, title = "箱根", categoryId = spa)) }
+        assertEquals("有 1 筆支出、1 個行程使用這個分類,刪除後會改成「雜項」。", runBlocking { lookups.categoryDeleteHint(spa) })
+        assertEquals("有 1 筆支出使用這個付款方式,刪除後會變成「未指定」。", runBlocking { lookups.methodDeleteHint(suica) })
+        assertTrue(runBlocking { db.lookupDao().deleteCategory(spa) })
+        assertTrue(runBlocking { db.lookupDao().deletePaymentMethod(suica) })
+        assertEquals("雜項", rows(trip).single().categoryName)
         assertNull(rows(trip).single().paymentMethodName)
+        assertEquals(cat("雜項"), runBlocking { db.planDao().get(plan) }!!.categoryId)
+    }
+
+    @Test fun aSumOnTheKeypadIsSavedAsItsResult() {
+        val trip = createTrip()
+        val vm = record(trip, "烤肉 3 人", "12800+2400×2", "吃", "信用卡", d(6, 12), currency = "JPY")
+        val r = rows(trip).single()
+        assertEquals(17600.0, r.amount, 0.0)
+        assertEquals(toHomeAmount(17600.0, 0.21), r.homeAmount, 0.0)
+        // Nothing to save when the sum comes to zero or less.
+        val next = ExpenseEditViewModel(app, db, trip, null, false)
+        "50−100".forEach { next.key(it.toString()) }
+        assertEquals(false, next.state!!.canSave)
+        assertTrue(vm.state != null)
+    }
+
+    @Test fun removingAMemberClearsTheirPayments() {
+        val trip = createTrip()
+        val members = runBlocking { db.tripDao().getMembers(trip) }
+        val aunt = members.first { it.name == "阿姨" }
+        runBlocking {
+            db.expenseDao().insert(Expense(tripId = trip, date = d(6, 11), amount = 100.0, currency = "TWD", rate = 1.0, homeAmount = 100.0,
+                categoryId = null, paymentMethodId = null, payerId = aunt.id, title = "阿姨請客"))
+            val t = db.tripDao().getTrip(trip)!!
+            db.tripDao().updateTrip(t, members.map { it.name } - "阿姨", emptyList())
+        }
+        assertNull(runBlocking { db.expenseDao().forTrip(trip) }.single().payerId)
+    }
+
+    /**
+     * Memories go to the phone gallery when the expense is saved: the camera's full-quality original (then deleted
+     * from the app), never a photo that was picked from the gallery in the first place, and never a receipt.
+     */
+    @Test fun onlyNewCameraMemoriesAreCopiedToTheGallery() {
+        val trip = createTrip()
+        val dir = java.io.File(app.cacheDir, "t").apply { mkdirs() }
+        fun file(n: String) = java.io.File(dir, n).apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val vm = ExpenseEditViewModel(app, db, trip, null, saveMemoriesToGallery = true)
+        val original = file("camera-full.jpg")
+        vm.photos += PhotoItem(null, file("view.jpg").path, PhotoType.MEMORY, original = original.path)
+        vm.photos += PhotoItem(null, file("picked.jpg").path, PhotoType.MEMORY, fromAlbum = true)
+        vm.photos += PhotoItem(null, file("receipt.jpg").path, PhotoType.RECEIPT)
+        "500".forEach { vm.key(it.toString()) }
+        var saved = false
+        vm.save { saved = true }
+        // The gallery copy is written off the main thread.
+        repeat(200) { if (!saved) { Thread.sleep(10); org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle() } }
+        assertTrue(saved)
+        val inserts = org.robolectric.Shadows.shadowOf(app.contentResolver).insertStatements.filter { it.uri.toString().contains("images") }
+        assertEquals(1, inserts.size) // only the camera memory
+        assertFalse(original.exists())
+        val id = rows(trip).single().id
+        assertEquals(listOf(true, true, false), runBlocking { db.photoDao().forExpense(id) }.map { it.savedToGallery })
     }
 
     @Test fun categoriesCanBeAddedRenamedAndReordered() {

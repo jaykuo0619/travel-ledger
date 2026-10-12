@@ -37,13 +37,21 @@ public struct CivilDate: Equatable, Sendable {
         return Int(r < 0 ? r + 7 : r)
     }
 
-    public static func today(_ now: Date = Date(), calendar: Calendar = .current) -> CivilDate {
+    /// The Gregorian calendar in the current time zone. Dates in the data are Gregorian whatever calendar the
+    /// phone is set to: with the ROC, Japanese or Buddhist calendar, Calendar.current would say year 115, 8 or 2569.
+    public static var gregorian: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = .current
+        return c
+    }
+
+    public static func today(_ now: Date = Date(), calendar: Calendar = CivilDate.gregorian) -> CivilDate {
         let c = calendar.dateComponents([.year, .month, .day], from: now)
         return CivilDate(year: c.year!, month: c.month!, day: c.day!)
     }
 
     /// Midnight of this date in [calendar]'s time zone, for date pickers.
-    public func date(calendar: Calendar = .current) -> Date {
+    public func date(calendar: Calendar = CivilDate.gregorian) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12)) ?? Date()
     }
 }
@@ -55,6 +63,6 @@ public extension Int64 {
 public func todayEpochDay(_ now: Date = Date()) -> Int64 { CivilDate.today(now).epochDay }
 
 /// Epoch millis to local month/day/hour/minute.
-public func localDateTime(millis: Int64, calendar: Calendar = .current) -> DateComponents {
+public func localDateTime(millis: Int64, calendar: Calendar = CivilDate.gregorian) -> DateComponents {
     calendar.dateComponents([.year, .month, .day, .hour, .minute], from: Date(timeIntervalSince1970: Double(millis) / 1000))
 }

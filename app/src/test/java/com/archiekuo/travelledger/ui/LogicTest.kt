@@ -18,6 +18,39 @@ class LogicTest {
     @Test fun doubleZeroOnEmpty() = assertEquals("", keys("00"))
     @Test fun clear() = assertEquals("", keys("1", "2", "C"))
 
+    // ── calculator ──
+    @Test fun sumAsTyped() = assertEquals("1200+350×2", keys("1", "2", "00", "+", "3", "5", "0", "×", "2"))
+    @Test fun timesBeforePlus() = assertEquals(1900.0, evaluate("1200+350×2")!!, 0.0)
+    @Test fun leftToRightWithinTheSameLevel() {
+        assertEquals(5.0, evaluate("20÷2÷2")!!, 0.0)
+        assertEquals(10.0, evaluate("20−5−5")!!, 0.0)
+        assertEquals(37.0, evaluate("100÷4+3×4")!!, 0.0)
+    }
+    @Test fun resultRoundedToTwoDecimals() = assertEquals(33.33, evaluate("100÷3")!!, 0.0)
+    @Test fun divideByZeroCannotBeWorkedOut() = assertEquals(null, evaluate("5÷0"))
+    @Test fun trailingOperatorIgnored() = assertEquals(1200.0, evaluate("1200+")!!, 0.0)
+    @Test fun negativeResultIsNotAnAmount() = assertEquals(-50.0, evaluate("50−100")!!, 0.0)
+    @Test fun operatorFirstIgnored() = assertEquals("", keys("+"))
+    @Test fun changingTheOperatorReplacesIt() = assertEquals("12×", keys("1", "2", "+", "×"))
+    @Test fun dotThenOperatorDropsTheDot() = assertEquals("12+", keys("1", "2", ".", "+"))
+    @Test fun eachNumberHasItsOwnDotAndLimits() {
+        assertEquals("1.5+2.25", keys("1", ".", "5", "+", "2", ".", "2", "5", "9"))
+        assertEquals("0.5×3", keys(".", "5", "×", "3"))
+        assertEquals("12+0", keys("1", "2", "+", "00", "0"))
+    }
+    @Test fun equalsCollapsesTheSum() {
+        assertEquals("1900", keys("1", "2", "00", "+", "3", "5", "0", "×", "2", "="))
+        assertEquals("33.33", keys("1", "00", "÷", "3", "="))
+        assertEquals("5÷0", keys("5", "÷", "0", "=")) // nothing to collapse into
+        assertEquals("19", keys("1", "9", "=", "⌫", "9")) // a result keeps going like any number
+    }
+    @Test fun backspaceRemovesAnOperator() = assertEquals("12", keys("1", "2", "+", "⌫"))
+    @Test fun plainNumbersStillWork() = assertEquals(1320.5, evaluate("1320.5")!!, 0.0)
+    @Test fun expressionForDisplay() {
+        assertEquals("12,800 + 2,400 × 2", fmtExpression("12800+2400×2"))
+        assertEquals("1,200 +", fmtExpression("1200+"))
+    }
+
     @Test fun homeAmountRoundsToTwoDecimals() = assertEquals(1075.0, toHomeAmount(5000.0, 0.215), 0.0)
     @Test fun homeAmountRounding() = assertEquals(0.01, toHomeAmount(1.0, 0.005), 0.0)
     @Test fun numberFormatting() {

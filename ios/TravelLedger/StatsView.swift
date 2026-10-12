@@ -235,11 +235,14 @@ struct CategoryManageView: View {
                         }
                         .buttonStyle(.plain)
                         MoveButtons(index: i, count: list.count) { from, to in model.write { try Q.moveCategory($0, from: from, to: to) } }
-                        // 「其他」 is where a deleted category's expenses go, so it stays.
-                        Button { deleting = c } label: { Image(systemName: "trash").frame(width: 44, height: 44) }
-                            .foregroundStyle(c.name == "其他" ? Palette.textMuted : Palette.danger)
-                            .disabled(c.name == "其他")
-                            .accessibilityLabel("刪除 \(c.name)")
+                        // The built-in ones can be renamed but not deleted; only added ones get a delete button.
+                        if c.builtIn == nil {
+                            Button { deleting = c } label: { Image(systemName: "trash").frame(width: 44, height: 44) }
+                                .foregroundStyle(Palette.danger)
+                                .accessibilityLabel("刪除 \(c.name)")
+                        } else {
+                            Color.clear.frame(width: 44, height: 44)
+                        }
                     }
                     .padding(.leading, 12).padding(.vertical, 6)
                 }
@@ -248,6 +251,8 @@ struct CategoryManageView: View {
             .ledgerCard(padding: 0)
             .padding(16)
             .readableWidth()
+            Text("基礎分類不能刪除,可以改名;自己新增的可以刪除。").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                .padding(.horizontal, 20).frame(maxWidth: .infinity, alignment: .leading).readableWidth()
         }
         .background(Palette.background)
         .navigationTitle("分類管理")
@@ -261,8 +266,10 @@ struct CategoryManageView: View {
         .alert("刪除「\(deleting?.name ?? "")」?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { c in
             Button("取消", role: .cancel) {}
             Button("刪除", role: .destructive) { if let id = c.id { model.write { try Q.deleteCategory($0, id) } } }
-        } message: { _ in
-            Text("使用此分類的支出會改歸「其他」。")
+        } message: { c in
+            let use = model.read { try Q.categoryUse($0, c.id ?? 0) } ?? (0, 0)
+            let other = (model.read { try Q.otherCategory($0) } ?? nil)?.name ?? "其他"
+            Text(verbatim: use.0 + use.1 == 0 ? "沒有支出或行程使用這個分類。" : "有 \(use.0) 筆支出、\(use.1) 個行程使用這個分類,刪除後會改成「\(other)」。")
         }
     }
 }
@@ -379,9 +386,13 @@ struct PaymentManageView: View {
                         }
                         .buttonStyle(.plain)
                         MoveButtons(index: i, count: list.count) { from, to in model.write { try Q.movePaymentMethod($0, from: from, to: to) } }
-                        Button { deleting = m } label: { Image(systemName: "trash").frame(width: 44, height: 44) }
-                            .foregroundStyle(Palette.danger)
-                            .accessibilityLabel("刪除 \(m.name)")
+                        if m.builtIn == nil {
+                            Button { deleting = m } label: { Image(systemName: "trash").frame(width: 44, height: 44) }
+                                .foregroundStyle(Palette.danger)
+                                .accessibilityLabel("刪除 \(m.name)")
+                        } else {
+                            Color.clear.frame(width: 44, height: 44)
+                        }
                     }
                     .padding(.leading, 12).padding(.vertical, 6)
                 }
@@ -390,6 +401,8 @@ struct PaymentManageView: View {
             .ledgerCard(padding: 0)
             .padding(16)
             .readableWidth()
+            Text("基礎付款方式不能刪除,可以改名;自己新增的可以刪除。").appFont(size: 13).foregroundStyle(Palette.onSurfaceVariant)
+                .padding(.horizontal, 20).frame(maxWidth: .infinity, alignment: .leading).readableWidth()
         }
         .background(Palette.background)
         .navigationTitle("付款方式管理")
@@ -424,8 +437,9 @@ struct PaymentManageView: View {
         .alert("刪除「\(deleting?.name ?? "")」?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { m in
             Button("取消", role: .cancel) {}
             Button("刪除", role: .destructive) { if let id = m.id { model.write { try Q.deletePaymentMethod($0, id) } } }
-        } message: { _ in
-            Text("使用此付款方式的支出會變成未指定。")
+        } message: { m in
+            let use = model.read { try Q.paymentMethodUse($0, m.id ?? 0) } ?? 0
+            Text(verbatim: use == 0 ? "沒有支出使用這個付款方式。" : "有 \(use) 筆支出使用這個付款方式,刪除後會變成「未指定」。")
         }
     }
 }

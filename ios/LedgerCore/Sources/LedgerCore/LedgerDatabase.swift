@@ -74,13 +74,24 @@ public final class LedgerDatabase: @unchecked Sendable {
                     path TEXT NOT NULL, width INTEGER NOT NULL DEFAULT 0, height INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL);
                 CREATE INDEX plan_photo_planItemId ON plan_photo(planItemId);
                 """)
+            // Plain SQL: later migrations add columns the record types know about but this table doesn't have yet.
             for (i, n) in defaultCategories.enumerated() {
-                var c = Category(name: n, sortOrder: i)
-                try c.insert(db)
+                try db.execute(sql: "INSERT INTO category (name, sortOrder) VALUES (?, ?)", arguments: [n, i])
             }
             for (i, n) in defaultPayments.enumerated() {
-                var p = PaymentMethod(name: n, sortOrder: i)
-                try p.insert(db)
+                try db.execute(sql: "INSERT INTO payment_method (name, sortOrder) VALUES (?, ?)", arguments: [n, i])
+            }
+        }
+        // Android database v11: the built-in categories and payment methods are marked, so they can be renamed
+        // but not deleted. Rows that still carry a default name are the built-in ones.
+        m.registerMigration("v2-builtIn") { db in
+            try db.execute(sql: "ALTER TABLE category ADD COLUMN builtIn TEXT")
+            try db.execute(sql: "ALTER TABLE payment_method ADD COLUMN builtIn TEXT")
+            for n in defaultCategories {
+                try db.execute(sql: "UPDATE category SET builtIn = ?1 WHERE id = (SELECT MIN(id) FROM category WHERE name = ?1)", arguments: [n])
+            }
+            for n in defaultPayments {
+                try db.execute(sql: "UPDATE payment_method SET builtIn = ?1 WHERE id = (SELECT MIN(id) FROM payment_method WHERE name = ?1)", arguments: [n])
             }
         }
         return m
@@ -153,7 +164,11 @@ public enum Q {
         guard let id = trip.id else { return }
         try trip.update(db)
         let existing = try Self.members(db, id)
-        for m in existing where !members.contains(m.name) { try db.execute(sql: "DELETE FROM member WHERE id = ?", arguments: [m.id]) }
+        for m in existing where !members.contains(m.name) {
+            // Expenses this member paid lose the payer, instead of pointing at someone who is gone.
+            try db.execute(sql: "UPDATE expense SET payerId = NULL WHERE payerId = ?", arguments: [m.id])
+            try db.execute(sql: "DELETE FROM member WHERE id = ?", arguments: [m.id])
+        }
         let kept = Set(existing.map(\.name))
         for n in members where !kept.contains(n) { var m = Member(tripId: id, name: n); try m.insert(db) }
         try db.execute(sql: "DELETE FROM trip_currency_rate WHERE tripId = ?", arguments: [id])

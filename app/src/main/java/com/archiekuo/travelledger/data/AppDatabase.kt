@@ -12,7 +12,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Trip::class, TripCurrencyRate::class, Member::class, Category::class,
         PaymentMethod::class, Expense::class, ExpenseShare::class, Photo::class, PlanItem::class, DayNote::class, PlanPhoto::class,
     ],
-    version = 10,
+    version = 11,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun tripDao(): TripDao
@@ -118,8 +118,21 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v11: the categories and payment methods the app starts with can be renamed but not deleted. */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for ((table, names) in listOf("category" to BUILT_IN_CATEGORIES, "payment_method" to BUILT_IN_PAYMENT_METHODS)) {
+                    db.execSQL("ALTER TABLE $table ADD COLUMN builtIn TEXT")
+                    // The first row with each starting name (a later copy of the same name stays deletable).
+                    val list = names.joinToString(",") { "'$it'" }
+                    db.execSQL("UPDATE $table SET builtIn = name WHERE name IN ($list) AND id IN (SELECT MIN(id) FROM $table GROUP BY name)")
+                }
+            }
+        }
+
         val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
+            MIGRATION_10_11,
         )
 
         fun create(context: Context): AppDatabase =
@@ -130,11 +143,11 @@ abstract class AppDatabase : RoomDatabase() {
             addMigrations(*ALL_MIGRATIONS)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
-                        listOf("吃", "交通", "購物", "住宿", "景點", "其他").forEachIndexed { i, n ->
-                            db.execSQL("INSERT INTO category (name, sortOrder, icon, color) VALUES ('$n', $i, '', -1)")
+                        BUILT_IN_CATEGORIES.forEachIndexed { i, n ->
+                            db.execSQL("INSERT INTO category (name, sortOrder, icon, color, builtIn) VALUES ('$n', $i, '', -1, '$n')")
                         }
-                        listOf("現金", "信用卡", "行動支付").forEachIndexed { i, n ->
-                            db.execSQL("INSERT INTO payment_method (name, sortOrder) VALUES ('$n', $i)")
+                        BUILT_IN_PAYMENT_METHODS.forEachIndexed { i, n ->
+                            db.execSQL("INSERT INTO payment_method (name, sortOrder, builtIn) VALUES ('$n', $i, '$n')")
                         }
                     }
                 })

@@ -25,6 +25,7 @@ import com.archiekuo.travelledger.data.PlanItem
 import com.archiekuo.travelledger.data.PlanStatus
 import com.archiekuo.travelledger.data.Reservation
 import com.archiekuo.travelledger.data.Trip
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 
@@ -294,9 +295,18 @@ fun PlanViewScreen(
         }
         viewing?.let { i ->
             if (i in pictures.indices) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val scope = rememberCoroutineScope()
                 PhotoViewer(
                     pictures.map { PhotoItem(null, it, com.archiekuo.travelledger.data.PhotoType.MEMORY) }, i,
-                    onClose = { viewing = null }, onType = { _, _ -> }, onDelete = {}, onSave = {}, editable = false,
+                    onClose = { viewing = null }, onType = { _, _ -> }, onDelete = {}, editable = false,
+                    onSave = { k ->
+                        val path = pictures.getOrNull(k) ?: return@PhotoViewer
+                        scope.launch {
+                            val ok = com.archiekuo.travelledger.photo.PhotoProcessor.saveToGallery(context, android.net.Uri.fromFile(java.io.File(path)))
+                            android.widget.Toast.makeText(context, if (ok) "已存到相簿" else "存檔失敗", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
                 )
             }
         }

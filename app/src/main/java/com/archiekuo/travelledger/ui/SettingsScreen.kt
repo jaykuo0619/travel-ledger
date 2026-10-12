@@ -93,6 +93,16 @@ fun SettingsScreen(
                 SettingRow(Icons.Rounded.Backup, Palette[2], "備份全部資料", "換手機前先備份,可選擇含不含照片", onBackup)
                 HorizontalDivider(Modifier.padding(start = 68.dp), color = ledger.hairline)
                 SettingRow(Icons.Rounded.SettingsBackupRestore, Palette[5], "從檔案還原或匯入", "備份檔,或同伴分享的旅程", onRestore)
+                HorizontalDivider(Modifier.padding(start = 68.dp), color = ledger.hairline)
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconTile(Icons.Rounded.DeleteSweep, Palette[7], size = 40.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("匯入後刪除原檔", style = MaterialTheme.typography.bodyLarge)
+                        Text("備份檔不會刪;取消或失敗也不會刪", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(settings.deleteImportedFile, { onSettings(settings.copy(deleteImportedFile = it)) })
+                }
             }
 
             SectionHeader("關於")

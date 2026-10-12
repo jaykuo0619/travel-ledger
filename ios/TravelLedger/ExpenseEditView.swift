@@ -67,10 +67,14 @@ struct ExpenseEditView: View {
     @State private var framed = false
     /// Photos changed by drawing that should also go to the photo library when the expense is saved.
     @State private var resave: Set<String> = []
+    /// Memories taken with 拍照 this time: the stored (1200 px) file → the camera's full-quality original, which is
+    /// what goes to the photo library when the expense is saved.
+    @State private var cameraOriginals: [String: URL] = [:]
 
     enum Field { case title, note }
 
-    private var amountValue: Double? { Double(amount).flatMap { $0 > 0 ? $0 : nil } }
+    /// The amount typed, or what the sum typed comes to (no need to press = first); nil unless it is above zero.
+    private var amountValue: Double? { evaluate(amount).flatMap { $0 > 0 ? $0 : nil } }
     private var rateValue: Double? { Double(rate).flatMap { $0 > 0 ? $0 : nil } }
     private var homeAmount: Double? { amountValue.flatMap { a in rateValue.map { toHomeAmount(a, $0) } } }
 
@@ -104,6 +108,8 @@ struct ExpenseEditView: View {
                                 onKey: { amount = applyKey(amount, $0) }, onCurrency: setCurrency,
                                 onOtherCurrency: { pickingCurrency = true },
                                 onRate: { rateDraft = rate; editingRate = true }, onSave: save)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                         .transition(.move(edge: .bottom))
                 }
             }
@@ -477,7 +483,15 @@ struct ExpenseEditView: View {
         processing = true
         defer { processing = false }
         guard let data = image.jpegData(compressionQuality: 0.95) else { return }
+        let before = Set(photos.map(\.path))
         await store(data, mode: mode)
+        // 拍照: keep the full-quality original aside for the photo library (拍收據 is never saved there).
+        if mode == PhotoType.memory, let added = photos.first(where: { !before.contains($0.path) }) {
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("camera", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let file = dir.appendingPathComponent(UUID().uuidString + ".jpg")
+            if (try? data.write(to: file)) != nil { cameraOriginals[added.path] = file }
+        }
     }
 
     /// Keeps a photo (photo/PhotoProcessor.kt). [mode]: RECEIPT reads it, MEMORY just keeps it, nil decides from
@@ -554,6 +568,7 @@ struct ExpenseEditView: View {
     /// Leaving without saving: photos added this time are thrown away.
     private func close() {
         photos.filter { $0.id == nil }.forEach { model.files.delete($0.path) }
+        cameraOriginals.values.forEach { try? FileManager.default.removeItem(at: $0) }
         model.files.delete(copyFiles) // drawn-on copies of photos whose originals stay
         dismiss()
     }
@@ -574,13 +589,19 @@ struct ExpenseEditView: View {
         e.ocrText = ocrText
         if original == nil { e.planItemId = target.planId }
 
-        // New memory photos also go to the photo library when the setting says so.
+        // With the setting on, memories taken with 拍照 go to the photo library at the camera's full quality, and so
+        // do memories that were drawn on or signed. Pictures picked from the library are already there.
         let toLibrary = model.settings.saveMemoriesToGallery
         var toSave = photos
         var libraryFiles: [URL] = []
-        for i in toSave.indices where toSave[i].type == PhotoType.memory && toLibrary && (toSave[i].id == nil || resave.contains(toSave[i].path)) {
-            toSave[i].savedToGallery = true
-            libraryFiles.append(model.files.url(toSave[i].path))
+        for i in toSave.indices where toSave[i].type == PhotoType.memory && toLibrary {
+            if let original = cameraOriginals[toSave[i].path] {
+                toSave[i].savedToGallery = true
+                libraryFiles.append(original)
+            } else if resave.contains(toSave[i].path) {
+                toSave[i].savedToGallery = true
+                libraryFiles.append(model.files.url(toSave[i].path))
+            }
         }
         var removed: [String] = []
         if model.write({ removed = try Q.saveExpense($0, e, photos: toSave).removed }) {
@@ -632,11 +653,17 @@ func recognizeText(_ data: Data, currency: String) -> [OcrLine] {
 }
 
 /// Adds a picture file to the photo library (asks for add-only access the first time).
-func saveToPhotoLibrary(_ file: URL) {
+func saveToPhotoLibrary(_ file: URL) { saveToPhotoLibrary(file) { _ in } }
+
+/// The same, reporting whether it worked. A camera original kept in the temporary folder is removed afterwards.
+func saveToPhotoLibrary(_ file: URL, done: @escaping @Sendable (Bool) -> Void) {
     PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-        guard status == .authorized || status == .limited else { return }
+        guard status == .authorized || status == .limited else { return done(false) }
         PHPhotoLibrary.shared().performChanges {
             PHAssetCreationRequest.forAsset().addResource(with: .photo, fileURL: file, options: nil)
+        } completionHandler: { ok, _ in
+            if file.path.contains("/tmp/camera/") { try? FileManager.default.removeItem(at: file) }
+            done(ok)
         }
     }
 }
@@ -702,7 +729,7 @@ private struct KeypadPanel: View {
                         .onChanged { v in
                             let start = dragStart ?? keyHeight
                             dragStart = start
-                            keyHeight = min(max(start - v.translation.height / 4, 40), 80)
+                            keyHeight = min(max(start - v.translation.height / 5, 40), 80)
                         }
                         .onEnded { _ in dragStart = nil }
                 )
@@ -719,51 +746,38 @@ private struct KeypadPanel: View {
                     Button("其他幣別…", action: onOtherCurrency)
                 } label: {
                     HStack(spacing: 4) {
-                        Text(currency).appFont(size: 17, weight: .bold)
+                        Text(currency).appFont(size: 17, weight: .bold).lineLimit(1)
                         Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold))
                     }
+                    .fixedSize()
                     .padding(.horizontal, 12).frame(minHeight: 44)
                     .background(Palette.primaryContainer, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .foregroundStyle(Palette.onPrimaryContainer)
                 }
-                Text(amount.isEmpty ? "0" : fmtTyped(amount))
-                    .font(.system(size: 38, weight: .bold)).tnum()
-                    .foregroundStyle(amount.isEmpty ? Palette.textMuted : Palette.onBackground)
-                    .lineLimit(1).minimumScaleFactor(0.5)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .accessibilityLabel("金額 \(amount.isEmpty ? "0" : amount)")
+                // Its own height, whatever else wants room: the figure must not shrink because the keypad is tall.
+                amountDisplay.fixedSize(horizontal: false, vertical: true)
             }
 
             rateLine
 
-            // Three columns of digits; the fourth has ⌫, C and a 儲存 two keys tall.
-            GeometryReader { geo in
-                let gap: CGFloat = 8
-                let w = (geo.size.width - gap * 3) / 4
-                HStack(alignment: .top, spacing: gap) {
-                    Grid(horizontalSpacing: gap, verticalSpacing: gap) {
-                        GridRow { key("7"); key("8"); key("9") }
-                        GridRow { key("4"); key("5"); key("6") }
-                        GridRow { key("1"); key("2"); key("3") }
-                        GridRow { key("00"); key("0"); key(".") }
+            // A real calculator: C ⌫ ÷ × / 7 8 9 − / 4 5 6 + / 1 2 3 = / 00 0 . 儲存
+            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+                GridRow { key("C"); backspace; key("÷"); key("×") }
+                GridRow { key("7"); key("8"); key("9"); key("−") }
+                GridRow { key("4"); key("5"); key("6"); key("+") }
+                GridRow { key("1"); key("2"); key("3"); key("=") }
+                GridRow {
+                    key("00"); key("0"); key(".")
+                    Button(action: onSave) {
+                        Text("儲存").appFont(size: 17, weight: .bold).lineLimit(1).minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity, minHeight: keyHeight)
+                            .foregroundStyle(canSave ? Palette.onPrimary : Palette.onSurfaceVariant)
+                            .background(canSave ? Palette.primary : Palette.surfaceVariant, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
-                    .frame(width: w * 3 + gap * 2)
-                    VStack(spacing: gap) {
-                        backspace
-                        key("C")
-                        Button(action: onSave) {
-                            Text("儲存").appFont(size: 17, weight: .bold).lineLimit(1).minimumScaleFactor(0.7)
-                                .frame(maxWidth: .infinity, minHeight: keyHeight * 2 + gap)
-                                .foregroundStyle(canSave ? Palette.onPrimary : Palette.onSurfaceVariant)
-                                .background(canSave ? Palette.primary : Palette.surfaceVariant, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!canSave)
-                    }
-                    .frame(width: w)
+                    .buttonStyle(.plain)
+                    .disabled(!canSave)
                 }
             }
-            .frame(height: keyHeight * 4 + 8 * 3)
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
@@ -795,15 +809,43 @@ private struct KeypadPanel: View {
         .frame(minHeight: 36)
     }
 
+    /// The amount: a number as typed, or — once there is an operator — the sum in small type above its result.
+    @ViewBuilder private var amountDisplay: some View {
+        if isExpression(amount) {
+            let result = evaluate(amount)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(fmtExpression(amount)).appFont(size: 15).tnum().foregroundStyle(Palette.onSurfaceVariant)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                if let result {
+                    Text(verbatim: "= " + fmtTyped(fmtNumber(result))).font(.system(size: 34, weight: .bold)).tnum()
+                        .foregroundStyle(result > 0 ? Palette.onBackground : Palette.danger)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                } else {
+                    Text("無法計算").font(.system(size: 34, weight: .bold)).foregroundStyle(Palette.danger).lineLimit(1).minimumScaleFactor(0.5)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .accessibilityElement(children: .combine)
+        } else {
+            Text(amount.isEmpty ? "0" : fmtTyped(amount))
+                .font(.system(size: 38, weight: .bold)).tnum()
+                .foregroundStyle(amount.isEmpty ? Palette.textMuted : Palette.onBackground)
+                .lineLimit(1).minimumScaleFactor(0.5)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityLabel("金額 \(amount.isEmpty ? "0" : amount)")
+        }
+    }
+
     private func key(_ k: String) -> some View {
-        Button { onKey(k) } label: {
-            Text(k).font(.system(size: 24, weight: .semibold)).tnum()
+        let op = keypadOperators.contains(k) || k == "="
+        return Button { onKey(k) } label: {
+            Text(k).font(.system(size: op ? 26 : 24, weight: .semibold)).tnum()
                 .frame(maxWidth: .infinity, minHeight: keyHeight)
-                .foregroundStyle(k == "C" ? Palette.danger : Palette.onBackground)
-                .background(Palette.field, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .foregroundStyle(k == "C" ? Palette.danger : op ? Palette.onPrimaryContainer : Palette.onBackground)
+                .background(op ? Palette.primaryContainer : Palette.field, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(k == "C" ? "清除" : k)
+        .accessibilityLabel(["C": "清除", "+": "加", "−": "減", "×": "乘", "÷": "除", "=": "等於"][k] ?? k)
     }
 
     /// ⌫ deletes one digit; holding it clears.

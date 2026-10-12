@@ -27,6 +27,9 @@ struct PlanEditView: View {
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var addingPictures = false
     @State private var mapTarget: MapTarget?
+    /// ✓ was tapped without a name.
+    @State private var nameMissing = false
+    @FocusState private var nameFocused: Bool
 
     private var isNew: Bool { target.planId == nil }
 
@@ -39,9 +42,17 @@ struct PlanEditView: View {
                         TextField("", text: $plan.title, prompt: Text("景點、餐廳或活動名稱").foregroundStyle(Palette.textMuted), axis: .vertical)
                             .lineLimit(1 ... 2)
                             .appFont(size: 17, weight: .semibold)
+                            .focused($nameFocused)
                             .onChange(of: plan.title) { _, v in
                                 if v.contains(where: \.isNewline) { plan.title = v.filter { !$0.isNewline } }
+                                if !v.isBlank { nameMissing = false }
                             }
+                    }
+                    .overlay {
+                        if nameMissing { RoundedRectangle(cornerRadius: Radius.medium, style: .continuous).strokeBorder(Palette.danger, lineWidth: 2) }
+                    }
+                    if nameMissing {
+                        Text("請輸入名稱才能儲存").appFont(size: 13, weight: .medium).foregroundStyle(Palette.danger).padding(.leading, 4)
                     }
 
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -114,9 +125,19 @@ struct PlanEditView: View {
                     Button { close() } label: { Image(systemName: "xmark") }.accessibilityLabel("關閉").disabled(addingPictures)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button { save() } label: { Image(systemName: "checkmark").fontWeight(.bold) }
-                        .disabled(plan.title.isBlank || addingPictures)
-                        .accessibilityLabel("儲存")
+                    // Always tappable (it only looks grey without a name): tapping it then points at the name.
+                    Button {
+                        if plan.title.isBlank {
+                            nameMissing = true
+                            nameFocused = true
+                        } else {
+                            save()
+                        }
+                    } label: {
+                        Image(systemName: "checkmark").fontWeight(.bold).foregroundStyle(plan.title.isBlank ? Palette.textMuted : Palette.primary)
+                    }
+                    .disabled(addingPictures)
+                    .accessibilityLabel("儲存")
                 }
             }
         }
