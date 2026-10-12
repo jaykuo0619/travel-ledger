@@ -198,4 +198,20 @@ final class TripListTests: XCTestCase {
         XCTAssertEqual(40, safeFileName(String(repeating: "旅", count: 60)).count)
         XCTAssertEqual("2026-10-22", fmtISODate(20748))
     }
+
+    /// Dates are Gregorian whatever calendar the phone uses (ROC year 115, Japanese 8, Buddhist 2569).
+    func testDatesIgnoreThePhonesCalendar() {
+        let now = Date(timeIntervalSince1970: 1_791_763_200) // 2026-10-12 00:00 UTC
+        let c = CivilDate.today(now)
+        XCTAssertEqual(2026, c.year)
+        XCTAssertTrue((2000 ... 2100).contains(CivilDate.today().year))
+        XCTAssertEqual(2026, localDateTime(millis: 1_791_763_200_000).year)
+        // And back: the date handed to a picker is that Gregorian day.
+        let back = CivilDate.gregorian.dateComponents([.year, .month, .day], from: CivilDate(year: 2026, month: 10, day: 22).date())
+        XCTAssertEqual([2026, 10, 22], [back.year, back.month, back.day])
+        for id in [Calendar.Identifier.republicOfChina, .japanese, .buddhist] {
+            // What the old code did, to show the difference this guards against.
+            XCTAssertNotEqual(2026, Calendar(identifier: id).dateComponents([.year], from: now).year)
+        }
+    }
 }

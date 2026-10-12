@@ -663,27 +663,108 @@ public final class TripArchive: @unchecked Sendable {
             if m.optString("kind") != kindAdditions { throw BadArchive("這不是補充檔") }
             let data = try zip.json("data.json")
             guard let trip = try m.reqObjects("trips").first else { throw JSONError.missing("trips") }
-            var items: [AdditionItem] = []
-            for p in try data.reqObjects("plans") {
-                let day = p.int64("date").map(fmtMonthDay) ?? "待排"
-                items.append(AdditionItem(uuid: try p.reqString("uuid"), isExpense: false, title: try p.reqString("title"),
-                                          detail: "行程 · \(day)" + (p.string("category").map { " · \($0)" } ?? "")))
-            }
-            for e in try data.reqObjects("expenses") {
-                let day = fmtMonthDay(try e.reqInt64("date"))
-                let title = e.optString("title")
-                items.append(AdditionItem(
-                    uuid: try e.reqString("uuid"), isExpense: true,
-                    title: title.trimmingCharacters(in: .whitespaces).isEmpty ? (e.string("category") ?? "支出") : title,
-                    detail: "\(day) · \(try e.reqString("currency")) \(fmtPlain(try e.reqDouble("amount")))" + (e.string("category").map { " · \($0)" } ?? "")
-                ))
-            }
+            let items = try Self.reviewItems(plans: try data.reqObjects("plans"), expenses: try data.reqObjects("expenses"))
             return Additions(tripUuid: try data.reqString("tripUuid"), tripName: try trip.reqString("name"),
                              from: m.optString("sharedBy", "同伴"), items: items)
         } catch let e as BadArchive {
             throw e
         } catch {
             throw BadArchive("檔案損壞,無法讀取")
+        }
+    }
+
+    /// Rows for the review list: plans first, then expenses.
+    private static func reviewItems(plans: [JSONObject], expenses: [JSONObject]) throws -> [AdditionItem] {
+        var items: [AdditionItem] = []
+        for p in plans {
+            let day = p.int64("date").map(fmtMonthDay) ?? "待排"
+            items.append(AdditionItem(uuid: try p.reqString("uuid"), isExpense: false, title: try p.reqString("title"),
+                                      detail: "行程 · \(day)" + (p.string("category").map { " · \($0)" } ?? "")))
+        }
+        for e in expenses {
+            let day = fmtMonthDay(try e.reqInt64("date"))
+            let title = e.optString("title")
+            items.append(AdditionItem(
+                uuid: try e.reqString("uuid"), isExpense: true,
+                title: title.trimmingCharacters(in: .whitespaces).isEmpty ? (e.string("category") ?? "支出") : title,
+                detail: "\(day) · \(try e.reqString("currency")) \(fmtPlain(try e.reqDouble("amount")))" + (e.string("category").map { " · \($0)" } ?? "")
+            ))
+        }
+        return items
+    }
+
+    // MARK: - A kind=trip file of my own trip, sent back by a companion
+
+    /// The trip in a kind=trip file that is mine on this phone (exists here and is not a read-only copy), with what
+    /// the sender has and I don't.
+    private func mineInFile(_ zip: Zip) throws -> (trip: Trip, json: JSONObject, from: String, plans: [JSONObject], expenses: [JSONObject], data: JSONObject)? {
+        let m = try zip.manifest()
+        guard m.optString("kind", Self.kindBackup) == Self.kindTrip else { return nil }
+        let data = try zip.json("data.json")
+        for t in try data.reqObjects("trips") {
+            guard let trip = try database.read({ try Q.tripByUuid($0, try t.reqString("uuid")) }), !trip.readOnly, let id = trip.id else { continue }
+            let (haveExpenses, havePlans) = try database.read { db in
+                (Set(try Q.expenses(db, id).map(\.uuid)), Set(try Q.plans(db, id).map(\.uuid)))
+            }
+            func blank(_ s: String?) -> String? { s.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } }
+            let from = blank(t.string("sharedBy")) ?? blank(m.string("sharedBy")) ?? "同伴"
+            let plans = try (t.objects("plans") ?? []).filter { !havePlans.contains(try $0.reqString("uuid")) }
+            let expenses = try (t.objects("expenses") ?? []).filter { !haveExpenses.contains(try $0.reqString("uuid")) }
+            return (trip, t, from, plans, expenses, data)
+        }
+        return nil
+    }
+
+    /// When [url] is a shared copy of a trip I organize: the plans and expenses in it that I don't have (by uuid).
+    /// Nil when the file is anything else, so the ordinary import goes on. An empty list means nothing is new.
+    public func readNewItems(_ url: URL) throws -> Additions? {
+        guard let found = try mineInFile(try Zip(url)) else { return nil }
+        return Additions(tripUuid: found.trip.uuid, tripName: found.trip.name, from: found.from,
+                         items: try Self.reviewItems(plans: found.plans, expenses: found.expenses))
+    }
+
+    /// Adds the [accepted] new items of such a file to my trip. Nothing of mine is changed: items I already have
+    /// are skipped, the payer, the plan index and the pending flag are dropped, expenses find their plan by uuid.
+    public func importNewItems(_ url: URL, accepted: Set<String>) -> Result {
+        do {
+            let zip = try Zip(url)
+            guard let found = try mineInFile(zip), let tripId = found.trip.id else { throw BadArchive("檔案損壞,無法匯入") }
+            func prepared(_ list: [JSONObject]) throws -> [JSONObject] {
+                try list.filter { accepted.contains(try $0.reqString("uuid")) }.map { o in
+                    var o = o
+                    o["addedBy"] = .string(o.string("addedBy") ?? found.from)
+                    o["pending"] = nil
+                    o["payer"] = nil
+                    o["plan"] = nil
+                    return o
+                }
+            }
+            let plans = try prepared(found.plans)
+            let expenses = try prepared(found.expenses)
+            var copied: [String: String] = [:]
+            do {
+                for item in plans + expenses {
+                    for ph in item.objects("photos") ?? [] {
+                        let name = try ph.reqString("file")
+                        if let path = try copyEntry(zip, name) { copied[name] = path }
+                    }
+                }
+                try database.write { db in
+                    let categoryIds = try Self.mergeCategories(db, found.data.objects("categories"))
+                    let paymentIds = try Self.mergePayments(db, found.data.objects("payments"))
+                    let t = JSONObject([("members", .array([])), ("rates", .array([])),
+                                        ("plans", .array(plans.map(JSON.object))), ("expenses", .array(expenses.map(JSON.object)))])
+                    try Self.writeContents(db, tripId: tripId, t, categoryIds, paymentIds, copied, keepPending: false, existingPlans: true)
+                }
+            } catch {
+                files.delete(Array(copied.values))
+                throw error
+            }
+            return .imported(kind: Self.kindAdditions, tripIds: [tripId], updated: plans.count + expenses.count)
+        } catch let e as BadArchive {
+            return .failed(e.message)
+        } catch {
+            return .failed("檔案損壞,無法匯入")
         }
     }
 
@@ -784,7 +865,9 @@ public final class TripArchive: @unchecked Sendable {
     /// Merges a desktop plans file: the trip is matched by uuid (created if missing); each plan is updated or added
     /// by uuid, items deleted on the desktop are deleted here, the desktop's day notes replace these days' notes.
     /// Expenses are never touched.
-    public func importPlans(_ url: URL) -> Result {
+    /// [organizer]: only when the trip is not on this phone yet — the name of whoever keeps its accounts, if that is
+    /// someone else. The trip is then created as their read-only copy (my own additions go back to them).
+    public func importPlans(_ url: URL, organizer: String? = nil) -> Result {
         do {
             let zip = try Zip(url)
             let m = try zip.manifest()
@@ -816,6 +899,10 @@ public final class TripArchive: @unchecked Sendable {
                     } else {
                         var trip = Trip(name: try t.reqString("name"), startDate: try t.reqInt64("startDate"), endDate: try t.reqInt64("endDate"),
                                         uuid: try t.reqString("uuid"), navApp: t.string("navApp"))
+                        if let by = organizer?.trimmingCharacters(in: .whitespacesAndNewlines), !by.isEmpty {
+                            trip.sharedBy = String(by.prefix(20))
+                            trip.sharedAt = m.optInt64("exportedAt")
+                        }
                         try trip.insert(db)
                         id = trip.id!
                     }

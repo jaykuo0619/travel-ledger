@@ -3,20 +3,53 @@ import XCTest
 
 /// Recording expenses: the keypad, defaults, saving, and category / payment method management.
 final class ExpenseTests: XCTestCase {
-    func testKeypad() {
-        XCTAssertEqual("0.", applyKey("", "."))
-        XCTAssertEqual("", applyKey("", "00"))
-        XCTAssertEqual("0", applyKey("0", "00"))
-        XCTAssertEqual("5", applyKey("0", "5"))
-        XCTAssertEqual("1200", applyKey("12", "00"))
-        XCTAssertEqual("1.5", applyKey("1.", "5"))
-        XCTAssertEqual("1.55", applyKey("1.55", "5")) // two decimals at most
-        XCTAssertEqual("1.5", applyKey("1.5", "."))
-        XCTAssertEqual("123456789", applyKey("123456789", "1")) // nine digits at most
-        XCTAssertEqual("12", applyKey("123", "⌫"))
-        XCTAssertEqual("", applyKey("123", "C"))
+    private func keys(_ k: String...) -> String { k.reduce("") { applyKey($0, $1) } }
+
+    // The cases of app/src/test/.../ui/LogicTest.kt.
+    func testKeypadDigits() {
+        XCTAssertEqual("12.5", keys("1", "2", ".", "5"))
+        XCTAssertEqual("0.5", keys(".", "5"))
+        XCTAssertEqual("5", keys("0", "5"))
+        XCTAssertEqual("1.2", keys("1", ".", "2", "."))
+        XCTAssertEqual("1.23", keys("1", ".", "2", "3", "4"))
+        XCTAssertEqual("123456789", "1234567890".reduce("") { applyKey($0, String($1)) })
+        XCTAssertEqual("1", keys("1", "2", "⌫"))
+        XCTAssertEqual("", keys("⌫"))
+        XCTAssertEqual("1200", keys("1", "2", "00"))
+        XCTAssertEqual("", keys("00"))
+        XCTAssertEqual("", keys("1", "2", "C"))
         XCTAssertEqual("1,234,567.5", fmtTyped("1234567.5"))
         XCTAssertEqual("0.", fmtTyped("0."))
+    }
+
+    func testCalculator() {
+        XCTAssertEqual("1200+350×2", keys("1", "2", "00", "+", "3", "5", "0", "×", "2"))
+        XCTAssertEqual(1900, evaluate("1200+350×2"))
+        XCTAssertEqual(5, evaluate("20÷2÷2"))
+        XCTAssertEqual(10, evaluate("20−5−5"))
+        XCTAssertEqual(37, evaluate("100÷4+3×4"))
+        XCTAssertEqual(33.33, evaluate("100÷3"))
+        XCTAssertNil(evaluate("5÷0"))
+        XCTAssertEqual(1200, evaluate("1200+"))
+        XCTAssertEqual(-50, evaluate("50−100"))
+        XCTAssertEqual("", keys("+"))
+        XCTAssertEqual("12×", keys("1", "2", "+", "×"))
+        XCTAssertEqual("12+", keys("1", "2", ".", "+"))
+        XCTAssertEqual("1.5+2.25", keys("1", ".", "5", "+", "2", ".", "2", "5", "9"))
+        XCTAssertEqual("0.5×3", keys(".", "5", "×", "3"))
+        XCTAssertEqual("12+0", keys("1", "2", "+", "00", "0"))
+        XCTAssertEqual("1900", keys("1", "2", "00", "+", "3", "5", "0", "×", "2", "="))
+        XCTAssertEqual("33.33", keys("1", "00", "÷", "3", "="))
+        XCTAssertEqual("5÷0", keys("5", "÷", "0", "=")) // nothing to collapse into
+        XCTAssertEqual("19", keys("1", "9", "=", "⌫", "9")) // a result keeps going like any number
+        XCTAssertEqual("12", keys("1", "2", "+", "⌫"))
+        XCTAssertEqual(1320.5, evaluate("1320.5"))
+        XCTAssertEqual("12,800 + 2,400 × 2", fmtExpression("12800+2400×2"))
+        XCTAssertEqual("1,200 +", fmtExpression("1200+"))
+        XCTAssertTrue(isExpression("1+2"))
+        XCTAssertFalse(isExpression("12"))
+        XCTAssertEqual(1075, toHomeAmount(5000, 0.215))
+        XCTAssertEqual(0.01, toHomeAmount(1, 0.005))
     }
 
     func testSuggestions() {
@@ -67,25 +100,60 @@ final class ExpenseTests: XCTestCase {
         XCTAssertNil(try phone.db.read { try Q.rates($0, tripId) }.first { $0.currency == "USD" }) // their trip's rates stay
     }
 
+    /// LedgerFlowTest.onlyAddedCategoriesAndPaymentMethodsCanBeDeleted
     func testCategoriesAndPaymentMethods() throws {
         let phone = try Phone()
         let tripId = try phone.db.write { try Q.createTrip($0, Trip(name: "t", startDate: 1, endDate: 2), members: [], rates: []) }
         try phone.db.write { try Q.addCategory($0, name: "按摩", icon: "more", color: 3) }
         var cats = try phone.db.read { try Q.categories($0) }
         XCTAssertEqual("按摩", cats.last?.name)
+        XCTAssertNil(cats.last?.builtIn)
+        XCTAssertEqual(["吃", "交通", "購物", "住宿", "景點", "其他"], cats.dropLast().map(\.builtIn))
         let massage = try XCTUnwrap(cats.last?.id)
         _ = try phone.db.write { try Q.saveExpense($0, Expense(tripId: tripId, date: 1, amount: 1, currency: "TWD", rate: 1, homeAmount: 1, categoryId: massage), photos: []) }
+        _ = try phone.db.write { try Q.savePlan($0, PlanItem(tripId: tripId, title: "SPA", categoryId: massage), pictures: []) }
+        XCTAssertEqual(1, try phone.db.read { try Q.categoryUse($0, massage) }.expenses)
+        XCTAssertEqual(1, try phone.db.read { try Q.categoryUse($0, massage) }.plans)
         try phone.db.write { try Q.moveCategory($0, from: cats.count - 1, to: 0) }
         cats = try phone.db.read { try Q.categories($0) }
         XCTAssertEqual("按摩", cats.first?.name)
-        try phone.db.write { try Q.deleteCategory($0, massage) }
-        XCTAssertEqual("其他", try phone.category(try phone.expenses(tripId)[0].categoryId))
+
+        // 其他 can be renamed and is still where deleted categories' items go; built-in ones can't be deleted.
+        var other = try XCTUnwrap(try phone.db.read { try Q.otherCategory($0) })
+        other.name = "雜項"
+        try phone.db.write { try Q.updateCategory($0, other) }
+        XCTAssertFalse(try phone.db.write { try Q.deleteCategory($0, try XCTUnwrap(other.id)) })
+        XCTAssertTrue(try phone.db.write { try Q.deleteCategory($0, massage) })
+        XCTAssertEqual("雜項", try phone.category(try phone.expenses(tripId)[0].categoryId))
+        XCTAssertEqual("雜項", try phone.category(try phone.plans(tripId)[0].categoryId))
+        XCTAssertEqual(6, try phone.db.read { try Q.categories($0) }.count)
 
         try phone.db.write { try Q.addPaymentMethod($0, name: "悠遊卡") }
-        let card = try XCTUnwrap(try phone.db.read { try Q.paymentMethods($0) }.last?.id)
+        let methods = try phone.db.read { try Q.paymentMethods($0) }
+        let card = try XCTUnwrap(methods.last?.id)
         try phone.db.write { try $0.execute(sql: "UPDATE expense SET paymentMethodId = ?", arguments: [card]) }
-        try phone.db.write { try Q.deletePaymentMethod($0, card) }
+        XCTAssertEqual(1, try phone.db.read { try Q.paymentMethodUse($0, card) })
+        XCTAssertFalse(try phone.db.write { try Q.deletePaymentMethod($0, try XCTUnwrap(methods.first?.id)) }) // 現金 stays
+        XCTAssertTrue(try phone.db.write { try Q.deletePaymentMethod($0, card) })
         XCTAssertNil(try phone.expenses(tripId)[0].paymentMethodId)
+        XCTAssertEqual(3, try phone.db.read { try Q.paymentMethods($0) }.count)
+    }
+
+    /// LedgerFlowTest.removingAMemberClearsTheirPayments
+    func testRemovingAMemberClearsTheirPayments() throws {
+        let phone = try Phone()
+        let tripId = try phone.db.write { try Q.createTrip($0, Trip(name: "t", startDate: 1, endDate: 2), members: ["我", "小美"], rates: []) }
+        let members = try phone.members(tripId)
+        try phone.db.write { db in
+            for m in members {
+                var e = Expense(tripId: tripId, date: 1, amount: 1, currency: "TWD", rate: 1, homeAmount: 1, payerId: m.id, title: m.name)
+                try e.insert(db)
+            }
+        }
+        try phone.db.write { try Q.updateTrip($0, try XCTUnwrap(try Q.trip($0, tripId)), members: ["我"], rates: []) }
+        let after = Dictionary(uniqueKeysWithValues: try phone.expenses(tripId).map { ($0.title, $0.payerId) })
+        XCTAssertEqual(members[0].id, after["我"] ?? nil)
+        XCTAssertNil(after["小美"] ?? nil)
     }
 
     func testReferenceRates() throws {
