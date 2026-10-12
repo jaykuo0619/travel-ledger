@@ -336,8 +336,11 @@ struct ViewerStart: Identifiable {
 /// Full-screen photos: swipe between them, pinch to zoom.
 struct PhotoViewer: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var model
     let paths: [(String, String?)]
     @State private var page: Int
+    /// Pages saved to the photo library this time (nil while saving, false when it failed).
+    @State private var saved: [Int: Bool] = [:]
 
     init(paths: [(String, String?)], start: Int) {
         self.paths = paths
@@ -353,6 +356,15 @@ struct PhotoViewer: View {
                 .accessibilityLabel("關閉")
                 Text("\(page + 1) / \(paths.count)").appFont(size: 17, weight: .semibold)
                 Spacer()
+                Button {
+                    let i = page
+                    saveToPhotoLibrary(model.files.url(paths[i].0)) { ok in Task { @MainActor in saved[i] = ok } }
+                } label: {
+                    Label(saved[page] == true ? "已存到相簿" : saved[page] == false ? "存檔失敗" : "存到相簿",
+                          systemImage: saved[page] == true ? "checkmark" : "square.and.arrow.down")
+                        .appFont(size: 15, weight: .semibold).padding(.horizontal, 12).frame(minHeight: 44)
+                }
+                .disabled(saved[page] == true)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 4)
